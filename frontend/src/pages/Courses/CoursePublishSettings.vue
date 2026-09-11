@@ -24,7 +24,7 @@
 				/>
 				<BooleanSwitch
 					size="sm"
-					v-model="doc.require_access_code"
+					:modelValue="doc?.require_access_code"
 					:label="__('Require access code')"
 					:description="
 						__(
@@ -266,7 +266,15 @@ const selfEnrollment = computed<boolean>({
 // in the moment the switch turns on means there's never a state where the
 // toggle is on and the code is blank.
 function onToggleAccessCode(val: boolean) {
-	if (val && resource.doc && !resource.doc.access_code) {
+	if (!resource.doc) return
+	// One handler, not v-model + a second @update:modelValue on the same
+	// switch: Vue only keeps the last onUpdate:modelValue bound to a given
+	// element, so the earlier version's explicit listener silently replaced
+	// v-model's own — the toggle looked like it flipped (FUISwitch's own
+	// local state) but doc.require_access_code, and this generator, never
+	// ran.
+	resource.doc.require_access_code = val ? 1 : 0
+	if (resource.doc.require_access_code && !resource.doc.access_code) {
 		resource.doc.access_code = generateAccessCode()
 	}
 	markDirty()

@@ -25,7 +25,7 @@
 						/>
 						<BooleanSwitch
 							size="sm"
-							v-model="batchDetail.doc.always_open"
+							:modelValue="batchDetail.doc?.always_open"
 							:label="__('Always Open')"
 							:description="
 								__(
@@ -106,7 +106,7 @@
 						<div class="space-y-4">
 							<BooleanSwitch
 								size="sm"
-								v-model="batchDetail.doc.require_access_code"
+								:modelValue="batchDetail.doc?.require_access_code"
 								:label="__('Require Access Code')"
 								:description="
 									__(
@@ -423,8 +423,17 @@ const batchDetail = createDocumentResource({
 // in the moment the switch turns on means there's never a state where the
 // toggle is on and the code is blank. Dirty-tracking here is automatic
 // (diffed against originalDoc below), so no separate markDirty call.
+//
+// One handler, not v-model + a second @update:modelValue on the same
+// switch: Vue only keeps the last onUpdate:modelValue bound to a given
+// element, so an explicit listener alongside v-model silently replaced
+// v-model's own — the toggle looked like it flipped (FUISwitch's own local
+// state) but batchDetail.doc.require_access_code, and this generator,
+// never ran. Same reasoning applies to onToggleAlwaysOpen below.
 const onToggleAccessCode = (val: boolean): void => {
-	if (val && batchDetail.doc && !batchDetail.doc.access_code) {
+	if (!batchDetail.doc) return
+	batchDetail.doc.require_access_code = val ? 1 : 0
+	if (batchDetail.doc.require_access_code && !batchDetail.doc.access_code) {
 		batchDetail.doc.access_code = generateAccessCode()
 	}
 }
@@ -444,7 +453,9 @@ const regenerateAccessCode = (): void => {
 // point: the instructor can see and override this value immediately, same
 // as the access code above, rather than it being computed invisibly.
 const onToggleAlwaysOpen = (val: boolean): void => {
-	if (val && batchDetail.doc) {
+	if (!batchDetail.doc) return
+	batchDetail.doc.always_open = val ? 1 : 0
+	if (batchDetail.doc.always_open) {
 		batchDetail.doc.end_date = dayjs().add(2, 'year').format('YYYY-MM-DD')
 	}
 }
