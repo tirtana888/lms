@@ -26,15 +26,16 @@
 import { Button, FileUploader, call, toast } from 'frappe-ui'
 import { computed, ref } from 'vue'
 
-// `config` is the same reactive uploadContext object LessonForm.vue passes
-// into every editor tool (see utils/upload.js's identical `this.config`
-// pattern) - read through computed()s rather than destructured once, so
-// this block picks up `docname` the moment the lesson is first saved,
-// instead of staying stuck on whatever it saw when the block was created
-// (before the lesson - and its name - existed).
+// `getContext` is a closure over LessonForm.vue's uploadContext (see
+// utils/scorm.js's renderUploader) rather than that object passed directly:
+// EditorJS snapshots a tool's `config` once, when the editor is constructed,
+// so a plain object reference stops seeing later updates (docname is only
+// known once the lesson - a placeholder at editor-construction time for a
+// brand-new lesson - is first saved). Calling the closure re-reads the live
+// object every time instead of whatever it looked like at construction.
 const props = defineProps({
-	config: {
-		type: Object,
+	getContext: {
+		type: Function,
 		default: () => ({}),
 	},
 	onUploaded: {
@@ -43,8 +44,8 @@ const props = defineProps({
 	},
 })
 
-const course = computed(() => props.config?.course)
-const lesson = computed(() => props.config?.docname)
+const course = computed(() => props.getContext?.()?.course)
+const lesson = computed(() => props.getContext?.()?.docname)
 
 const extracting = ref(false)
 
@@ -68,7 +69,12 @@ const onFileUploaded = async (file) => {
 			lesson: lesson.value,
 			scorm_package: file,
 		})
-		props.onUploaded(data)
+		// Fold course/lesson into the saved block data: renderScorm() (the
+		// student-facing playback) reads them from there instead of `config`,
+		// since Lesson.vue constructs that student-view editor with an empty
+		// uploadContext ({}) — none of the other blocks need one for read-only
+		// rendering.
+		props.onUploaded({ ...data, course: course.value, lesson: lesson.value })
 	} catch (err) {
 		toast.error(err.messages?.[0] || __('Failed to process SCORM package.'))
 	} finally {

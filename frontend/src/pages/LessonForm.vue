@@ -193,14 +193,6 @@ const contentUploadContext = reactive({
 	fieldname: 'content',
 	course: null,
 })
-if (typeof window !== 'undefined') {
-	window.__scormDebugInstances = window.__scormDebugInstances || []
-	window.__scormDebugInstances.push(contentUploadContext)
-	console.error(
-		'[SCORM DEBUG] LessonForm setup ran, instance #' +
-			window.__scormDebugInstances.length
-	)
-}
 const instructorUploadContext = reactive({
 	docname: null,
 	fieldname: 'instructor_content',
@@ -268,7 +260,6 @@ watch(
 	() => props.courseName,
 	(value) => {
 		contentUploadContext.course = value
-		console.error('[SCORM DEBUG] contentUploadContext.course set to', value)
 	},
 	{ immediate: true }
 )
@@ -360,10 +351,6 @@ const lessonDetails = createResource({
 				: false
 			contentUploadContext.docname = data.lesson.name
 			instructorUploadContext.docname = data.lesson.name
-			console.error('[SCORM DEBUG] contentUploadContext now', {
-				course: contentUploadContext.course,
-				docname: contentUploadContext.docname,
-			})
 			nextTick(autoGrowTitle)
 			Promise.all([addLessonContent(data), addInstructorNotes(data)]).then(
 				() => {

@@ -160,9 +160,15 @@ export function getEditorTools(
 			class: Upload,
 			config: uploadContext,
 		},
+		// A closure, not `uploadContext` itself: EditorJS resolves each tool's
+		// `config` once, when the editor is constructed, so a plain object
+		// reference stops seeing `docname` update once a brand-new lesson (a
+		// placeholder at that point) is first saved. Calling this re-reads
+		// whatever uploadContext holds right now instead of at construction
+		// time. See utils/scorm.js and components/ScormUploadPlugin.vue.
 		scorm: {
 			class: Scorm,
-			config: uploadContext,
+			config: { getContext: () => uploadContext },
 		},
 		table: {
 			class: Table,

@@ -51,20 +51,17 @@ export class Scorm {
 	}
 
 	renderUploader() {
-		const instances =
-			(typeof window !== 'undefined' && window.__scormDebugInstances) || []
-		console.error('[SCORM DEBUG] renderUploader config snapshot', {
-			course: this.config?.course,
-			docname: this.config?.docname,
-			isKnownInstance: instances.includes(this.config),
-			knownInstanceCount: instances.length,
-			knownDocnames: instances.map((i) => i.docname),
-		})
-		// `config` (not a snapshot of its fields) so the uploader keeps seeing
-		// `docname` update once this brand-new lesson is first saved — see the
-		// comment in ScormUploadPlugin.vue.
+		// EditorJS resolves each tool's `config` once, when the editor itself is
+		// constructed (BlockEditor.vue's onMounted) — for a lesson that still
+		// exists only as a placeholder at that point, `docname` is null then and
+		// stays null in that captured object forever, no matter how much later
+		// the block actually gets inserted or how long the uploader waits. A
+		// plain object reference doesn't survive that; a closure does, because
+		// calling it re-reads whatever LessonForm.vue's uploadContext holds at
+		// call time rather than at editor-construction time. getContext is that
+		// closure (see utils/index.js's scorm tool entry).
 		this.app = createApp(ScormUploadPlugin, {
-			config: this.config,
+			getContext: this.config?.getContext,
 			onUploaded: (data) => {
 				this.data = data
 				// Tear down the uploader app before clearing its DOM: replaceChildren
@@ -92,10 +89,16 @@ export class Scorm {
 	}
 
 	renderScorm() {
+		// course/lesson come from the block's own saved data, not `config`:
+		// the student-facing render (Lesson.vue) constructs the editor with an
+		// empty uploadContext ({}), since none of the other blocks need one for
+		// read-only playback. ScormUploadPlugin folds course/lesson into the
+		// data it hands to onUploaded specifically so this path never needs
+		// config at all.
 		const { userResource } = usersStore()
 		this.app = createApp(ScormBlock, {
-			course: this.config.course,
-			lesson: this.config.docname,
+			course: this.data.course,
+			lesson: this.data.lesson,
 			launchFile: this.data.launch_file,
 			member: userResource.data?.name,
 		})
