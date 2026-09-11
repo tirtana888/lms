@@ -80,7 +80,7 @@ def create_course():
 		4. Getting Certified: Once a learner completes the course or batch, you can grant them a certificate. The app provides an inbuilt certificate template that you can use as-is or customize by creating your own template.
 		<br>
 		<br>
-		To know more about the app and its features, <a href="https://docs.frappe.io/learning">check out the documentation</a>.
+		To know more about the app and its features, <a href="#">check out the documentation</a>.
  """
 	course.save()
 	return course

@@ -181,15 +181,6 @@
 							</div>
 						</template>
 					</Tooltip>
-					<Tooltip
-						v-if="showAppointmentIcon"
-						:text="__('Book a free onboarding session with the Frappe team')"
-					>
-						<span
-							class="lucide-phone size-4 text-ink-gray-7 cursor-pointer"
-							@click="redirectToAppointmentScreen()"
-						/>
-					</Tooltip>
 					<Tooltip v-if="showOnboarding" :text="__('Help')">
 						<span
 							class="lucide-circle-help size-4 text-ink-gray-7 cursor-pointer"
@@ -199,12 +190,6 @@
 									minimize = !showHelpModal
 								}
 							"
-						/>
-					</Tooltip>
-					<Tooltip :text="__('Powered by Frappe Learning')">
-						<span
-							class="lucide-zap size-4 text-ink-gray-7 cursor-pointer"
-							@click="redirectToWebsite()"
 						/>
 					</Tooltip>
 				</div>
@@ -238,7 +223,7 @@
 			:afterSkipAll="() => capture('onboarding_steps_skipped')"
 			:afterReset="(step) => capture('onboarding_step_reset_' + step)"
 			:afterResetAll="() => capture('onboarding_steps_reset')"
-			docsLink="https://docs.frappe.io/learning"
+			docsLink="#"
 		/>
 		<IntermediateStepModal
 			v-model="showIntermediateModal"
@@ -298,7 +283,6 @@ import UserDropdown from '@/components/Sidebar/UserDropdown.vue'
 import CollapseSidebar from '@/components/Icons/CollapseSidebar.vue'
 import SidebarLink from '@/components/Sidebar/SidebarLink.vue'
 import CommandPalette from '@/components/CommandPalette/CommandPalette.vue'
-import { openExternal } from '@/utils/openExternal'
 import {
 	loadUnreadCount,
 	unreadCount,
@@ -669,10 +653,6 @@ const updateSidebarLinks = () => {
 	updateUnreadCount()
 }
 
-const redirectToWebsite = () => {
-	openExternal('https://frappe.io/learning')
-}
-
 const isStudent = computed(() => {
 	return userResource.data?.is_student
 })
@@ -706,12 +686,6 @@ const calculateTrialEndDays = (trialEndDate) => {
 	const diffTime = trialEndDate - today
 	const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
 	return diffDays
-}
-
-const redirectToAppointmentScreen = () => {
-	openExternal(
-		'https://calendar.google.com/calendar/u/0/appointments/schedules/AcZssZ0c7Z3XIpW1WgbeIuktSaoX6qudoYuSdRbIlJty5TW7p4IZaOk5viHQGwTNi6HpNVqzOZOTHcle'
-	)
 }
 
 onUnmounted(() => {

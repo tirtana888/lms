@@ -64,7 +64,7 @@ const emit = defineEmits<{ enable: [] }>()
 
 // raven_integration installs at the bench and has no marketplace page, so only
 // Raven's half of the sentence is a link.
-const MARKETPLACE_URL = 'https://cloud.frappe.io/marketplace/apps/raven'
+const MARKETPLACE_URL = '#'
 
 // One string with a placeholder, split around the app name at render time. Three
 // separate __() calls could not be reordered by a translator, gave the fragments

@@ -181,8 +181,7 @@ export const settingsStructure = [
 										name: 'livecode_url',
 										doctype: 'Livecode URL',
 										type: 'text',
-										description:
-											'https://docs.frappe.io/learning/falcon-self-hosting-guide',
+										description: '#',
 									},
 								],
 							},

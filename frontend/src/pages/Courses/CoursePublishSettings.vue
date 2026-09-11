@@ -262,7 +262,7 @@ function setPaidCertificate(val: boolean) {
 }
 
 function openPaymentsApp() {
-	openExternal('https://frappecloud.com/marketplace/apps/payments')
+	openExternal('#')
 }
 
 const timezoneResource = createResource({
