@@ -23,6 +23,18 @@
 							variant="outline"
 							:onCreate="createCategory"
 						/>
+						<BooleanSwitch
+							size="sm"
+							v-model="batchDetail.doc.always_open"
+							:label="__('Always Open')"
+							:description="
+								__(
+									'Enrollment stays open regardless of the start date below.'
+								)
+							"
+							@update:modelValue="onToggleAlwaysOpen"
+						/>
+						<div />
 						<FormControl
 							v-model="batchDetail.doc.start_date"
 							:label="__('Batch Start Date')"
@@ -340,6 +352,7 @@ import {
 } from 'frappe-ui'
 import { InputLabel, useInputLabeling } from '@/components/Form/labeling'
 import { useDebounceFn } from '@vueuse/core'
+import dayjs from '@/utils/dayjs'
 import BooleanSwitch from '@/components/Controls/BooleanSwitch.vue'
 import {
 	createLMSCategory,
@@ -419,6 +432,21 @@ const onToggleAccessCode = (val: boolean): void => {
 const regenerateAccessCode = (): void => {
 	if (!batchDetail.doc) return
 	batchDetail.doc.access_code = generateAccessCode()
+}
+
+// start_date/end_date stay required and visible rather than hidden: sorting,
+// the Live/Upcoming listing, and "days after batch start" drip release all
+// read them as real dates (see lms.lms.utils.get_batches/get_batch_details),
+// so an always-open batch still needs one instead of going through a
+// separate nullable code path. Pushing end_date out two years is what
+// actually keeps it enrollable that whole time — accept_enrollments checks
+// always_open first, but the date fields staying accurate/visible is the
+// point: the instructor can see and override this value immediately, same
+// as the access code above, rather than it being computed invisibly.
+const onToggleAlwaysOpen = (val: boolean): void => {
+	if (val && batchDetail.doc) {
+		batchDetail.doc.end_date = dayjs().add(2, 'year').format('YYYY-MM-DD')
+	}
 }
 
 const openEmailTemplateForm = (): void => {
@@ -539,6 +567,7 @@ const updateBatchData = (): void => {
 		'paid_batch',
 		'allow_self_enrollment',
 		'require_access_code',
+		'always_open',
 		'certification',
 		'evaluation',
 	]

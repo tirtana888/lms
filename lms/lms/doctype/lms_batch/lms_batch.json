@@ -11,6 +11,7 @@
   "section_break_earo",
   "published",
   "title",
+  "always_open",
   "start_date",
   "end_date",
   "column_break_4",
@@ -80,6 +81,13 @@
    "in_list_view": 1,
    "label": "Title",
    "reqd": 1
+  },
+  {
+   "default": "0",
+   "description": "Enrollment stays open regardless of the start date below. The dates still drive sorting, the Live/Upcoming listing, and \"days after batch start\" drip release, so they stay set rather than blank.",
+   "fieldname": "always_open",
+   "fieldtype": "Check",
+   "label": "Always Open"
   },
   {
    "fieldname": "end_date",

@@ -1745,6 +1745,7 @@ def get_batch_details(batch: str):
 			"evaluation_end_date",
 			"allow_self_enrollment",
 			"require_access_code",
+			"always_open",
 			"certification",
 			"evaluation",
 			"timezone",
@@ -1758,7 +1759,7 @@ def get_batch_details(batch: str):
 	)
 
 	batch_details.instructors = get_instructors("LMS Batch", batch)
-	batch_details.accept_enrollments = batch_details.start_date > getdate()
+	batch_details.accept_enrollments = bool(batch_details.always_open) or batch_details.start_date > getdate()
 
 	if (
 		not batch_details.accept_enrollments
@@ -1779,7 +1780,7 @@ def get_batch_details(batch: str):
 	elif is_student_enrolled:
 		batch_details.students = [frappe.session.user]
 
-	if batch_details.paid_batch and batch_details.start_date >= getdate():
+	if batch_details.paid_batch and (batch_details.always_open or batch_details.start_date >= getdate()):
 		batch_details.amount, batch_details.currency = check_multicurrency(
 			batch_details.amount, batch_details.currency, None, batch_details.amount_usd
 		)
@@ -2994,6 +2995,7 @@ def get_batches(
 			"timezone",
 			"published",
 			"category",
+			"always_open",
 		],
 		order_by=order_by,
 		start=start,
@@ -3105,7 +3107,7 @@ def get_batch_card_details(batches: list) -> list:
 		if batch.seat_count:
 			batch.seats_left = batch.seat_count - students_count
 
-		if batch.paid_batch and batch.start_date >= getdate():
+		if batch.paid_batch and (batch.always_open or batch.start_date >= getdate()):
 			batch.amount, batch.currency = check_multicurrency(
 				batch.amount, batch.currency, None, batch.amount_usd
 			)

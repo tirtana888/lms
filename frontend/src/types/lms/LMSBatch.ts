@@ -17,6 +17,8 @@ export interface LMSBatch {
 	idx?: number
 	/**	Title : Data	*/
 	title: string
+	/**	Always Open : Check	*/
+	always_open?: 0 | 1
 	/**	End Date : Date	*/
 	end_date: string
 	/**	Description : Small Text	*/
