@@ -25,13 +25,14 @@ fi
 
 # sites/assets (compiled CSS/JS from `bench build`) is also inside the
 # volume, so it's wiped empty just like apps.txt was. It's a pure build
-# artifact — identical for every instance of this image — backed up
-# outside sites/ at build time, so just restore it if missing.
-if [ ! -d sites/assets ]; then
-  echo "sites/assets hilang (volume kosong), restore dari backup build-time..."
-  cp -r /home/frappe/assets-backup sites/assets
-  chown -R frappe:frappe sites/assets
-fi
+# artifact backed up outside sites/ at build time — but "restore only if
+# missing" left a stale copy in place across image updates (old content
+# hashes on disk, new ones in assets.json, everything 404s). It never
+# needs to survive a redeploy, so always replace it with this image's copy.
+echo "Menyegarkan sites/assets dari backup build-time..."
+rm -rf sites/assets
+cp -r /home/frappe/assets-backup sites/assets
+chown -R frappe:frappe sites/assets
 
 if [ ! -d "sites/$SITE_NAME" ]; then
   echo "Site $SITE_NAME belum ada, membuat baru..."

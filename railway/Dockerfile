@@ -26,7 +26,7 @@ WORKDIR /home/frappe/frappe-bench
 # a missing key is a build-time Rollup error, not just an empty runtime
 # value — the base image's config is still the bare "{}" bench init wrote.
 RUN echo '{"socketio_port": 9000}' > sites/common_site_config.json \
-    && bench get-app https://github.com/tirtana888/lms --branch v2.63.0 --skip-assets \
+    && bench get-app https://github.com/tirtana888/lms --branch nusadaya-v2.63.0 --skip-assets \
     && ln -sfn /home/frappe/frappe-bench/apps/frappe/ui \
          apps/lms/frontend/node_modules/@framework/ui \
     && bench build \
