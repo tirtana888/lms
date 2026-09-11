@@ -29,7 +29,8 @@ RUN echo '{"socketio_port": 9000}' > sites/common_site_config.json \
     && bench get-app https://github.com/tirtana888/lms --branch v2.63.0 --skip-assets \
     && ln -sfn /home/frappe/frappe-bench/apps/frappe/ui \
          apps/lms/frontend/node_modules/@framework/ui \
-    && bench build --app lms
+    && bench build --app lms \
+    && cp -r sites/assets /home/frappe/assets-backup
 
 USER root
 COPY railway/supervisord.conf /etc/supervisor/conf.d/frappe.conf

@@ -23,6 +23,16 @@ if [ ! -f sites/common_site_config.json ]; then
   su frappe -c "echo '{\"socketio_port\": 9000}' > sites/common_site_config.json"
 fi
 
+# sites/assets (compiled CSS/JS from `bench build`) is also inside the
+# volume, so it's wiped empty just like apps.txt was. It's a pure build
+# artifact — identical for every instance of this image — backed up
+# outside sites/ at build time, so just restore it if missing.
+if [ ! -d sites/assets ]; then
+  echo "sites/assets hilang (volume kosong), restore dari backup build-time..."
+  cp -r /home/frappe/assets-backup sites/assets
+  chown -R frappe:frappe sites/assets
+fi
+
 if [ ! -d "sites/$SITE_NAME" ]; then
   echo "Site $SITE_NAME belum ada, membuat baru..."
   su frappe -c "bench new-site '$SITE_NAME' \
