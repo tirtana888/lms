@@ -51,10 +51,14 @@ export class Scorm {
 	}
 
 	renderUploader() {
+		const instances =
+			(typeof window !== 'undefined' && window.__scormDebugInstances) || []
 		console.error('[SCORM DEBUG] renderUploader config snapshot', {
 			course: this.config?.course,
 			docname: this.config?.docname,
-			configRef: this.config,
+			isKnownInstance: instances.includes(this.config),
+			knownInstanceCount: instances.length,
+			knownDocnames: instances.map((i) => i.docname),
 		})
 		// `config` (not a snapshot of its fields) so the uploader keeps seeing
 		// `docname` update once this brand-new lesson is first saved — see the
