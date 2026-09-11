@@ -32,13 +32,18 @@ if [ ! -d "sites/$SITE_NAME" ]; then
     --admin-password '$ADMIN_PASSWORD' \
     --no-mariadb-socket \
     --install-app lms"
-
-  su frappe -c "bench --site '$SITE_NAME' set-config redis_cache '$REDIS_CACHE'"
-  su frappe -c "bench --site '$SITE_NAME' set-config redis_queue '$REDIS_QUEUE'"
-  su frappe -c "bench --site '$SITE_NAME' set-config redis_socketio '$REDIS_QUEUE'"
 else
   echo "Site $SITE_NAME sudah ada, lewati bootstrap."
 fi
+
+# socketio.js (the Node realtime server) reads its Redis target from the
+# bench-wide common_site_config.json, not the per-site config — set-config
+# without -g only writes site_config.json, which socketio never reads, so it
+# was falling back to 127.0.0.1:6379 and crash-looping. Set these globally,
+# every boot (cheap, idempotent), not just on first site creation.
+su frappe -c "bench set-config -g redis_cache '$REDIS_CACHE'"
+su frappe -c "bench set-config -g redis_queue '$REDIS_QUEUE'"
+su frappe -c "bench set-config -g redis_socketio '$REDIS_QUEUE'"
 
 su frappe -c "bench use '$SITE_NAME'"
 
