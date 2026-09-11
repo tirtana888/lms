@@ -30,13 +30,21 @@
 		</template>
 
 		<template #cell="{ column, row, value }">
-			<div v-if="column.key === 'full_name'" class="flex items-center gap-x-3">
+			<router-link
+				v-if="column.key === 'full_name'"
+				:to="{
+					name: 'MemberForm',
+					params: { memberID: row.name },
+					query: { tab: 'Overview' },
+				}"
+				class="flex items-center gap-x-3 hover:underline"
+			>
 				<Avatar size="sm" :image="row.user_image" :label="row.full_name" />
 				<div class="flex min-w-0 flex-col">
 					<span class="truncate">{{ row.full_name }}</span>
 					<span class="truncate text-p-xs text-ink-gray-5">{{ row.name }}</span>
 				</div>
-			</div>
+			</router-link>
 			<div v-else-if="column.key === 'roles'" class="flex flex-wrap gap-1">
 				<Badge
 					v-for="role in displayRoles(row)"
@@ -46,6 +54,32 @@
 				>
 					{{ role }}
 				</Badge>
+			</div>
+			<div v-else-if="column.key === 'batches'" class="flex flex-wrap gap-1">
+				<Badge
+					v-for="batch in row.batches || []"
+					:key="batch"
+					theme="green"
+					variant="subtle"
+				>
+					{{ batch }}
+				</Badge>
+			</div>
+			<div v-else-if="column.key === 'tags'" class="flex flex-wrap gap-1">
+				<Badge
+					v-for="tag in displayTags(row)"
+					:key="tag"
+					theme="blue"
+					variant="subtle"
+				>
+					{{ tag }}
+				</Badge>
+			</div>
+			<div
+				v-else-if="column.key === 'last_active' || column.key === 'creation'"
+				class="text-p-sm text-ink-gray-6"
+			>
+				{{ formatDate(value) }}
 			</div>
 			<Dropdown
 				v-else-if="column.key === 'actions'"
@@ -115,6 +149,10 @@ type Member = {
 	name: string
 	roles?: string[]
 	user_image?: string
+	last_active?: string
+	creation?: string
+	_user_tags?: string
+	batches?: string[]
 }
 
 // Matches MEMBERS_PAGE_LENGTH in lms/lms/api.py, which pages `start` by this.
@@ -144,6 +182,16 @@ const roleLabels: Record<string, string> = {
 
 const displayRoles = (row: Member): string[] =>
 	(row.roles || []).filter((role) => roleLabels[role]).map((role) => roleLabels[role])
+
+// Frappe stores tags as a bare comma-separated string on every doc
+// (`_user_tags`), not a child table — same parsing as get_member_overview.
+const displayTags = (row: Member): string[] =>
+	(row._user_tags || '').split(',').filter((tag) => tag)
+
+const dayjs = inject('$dayjs') as (date: string) => { format: (fmt: string) => string }
+
+const formatDate = (value: unknown): string =>
+	typeof value === 'string' && value ? dayjs(value).format('DD MMM YYYY') : ''
 
 const memberList = ref<Member[]>([])
 const hasNextPage = ref(false)
@@ -216,10 +264,6 @@ onMounted(() => {
 	refreshMembers()
 })
 
-const openProfile = (member: Member) => {
-	router.push({ name: 'Profile', params: { username: member.username } })
-}
-
 const openEditMember = (member: Member) => {
 	openFormRoute(router, {
 		name: 'MemberForm',
@@ -237,11 +281,6 @@ const openDeleteDialog = (member: Member) => {
 }
 
 const getActionOptions = (row: Member) => [
-	{
-		label: __('View profile'),
-		icon: 'lucide-user',
-		onClick: () => openProfile(row),
-	},
 	{
 		label: __('Edit member'),
 		icon: 'lucide-pencil',
@@ -270,9 +309,30 @@ const confirmDelete = async (close: () => void) => {
 }
 
 const columns: ListColumn[] = [
-	{ label: __('User'), key: 'full_name', width: 2.5, icon: 'lucide-user' },
-	{ label: __('Roles'), key: 'roles', width: 2 },
-	{ label: '', key: 'actions', width: 0.5, kind: 'actions' },
+	{ label: __('User'), key: 'full_name', width: 2.2, icon: 'lucide-user' },
+	{ label: __('Roles'), key: 'roles', width: 1.3 },
+	{
+		label: __('Batch'),
+		key: 'batches',
+		width: 1.5,
+		icon: 'lucide-users',
+		hideOnMobile: true,
+	},
+	{ label: __('Tags'), key: 'tags', width: 1.2, hideOnMobile: true },
+	{
+		label: __('Last Activity'),
+		key: 'last_active',
+		width: 1.1,
+		icon: 'lucide-clock',
+	},
+	{
+		label: __('Registered'),
+		key: 'creation',
+		width: 1.1,
+		icon: 'lucide-calendar',
+		hideOnMobile: true,
+	},
+	{ label: '', key: 'actions', width: 0.4, kind: 'actions' },
 ]
 
 const breadcrumbs: Breadcrumb[] = [{ label: __('Users'), route: { name: 'Members' } }]

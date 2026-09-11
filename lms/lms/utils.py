@@ -953,9 +953,24 @@ def get_course_count(filters: dict = None) -> int:
 
 
 def count_matching(doctype: str, filters: dict | list, or_filters: dict = None) -> int:
-	"""Row count for filters that include or_filters, which db.count cannot take."""
-	rows = frappe.get_all(doctype, filters=filters, or_filters=or_filters, fields=[{"COUNT": "*"}])
-	return cint(next(iter(rows[0].values()))) if rows else 0
+	"""Return row count for filters, including OR filters.
+
+	Upstream fix (frappe/lms@56d4bfd3): the previous
+	`fields=[{"COUNT": "*"}]` form passed a dict where Frappe's query builder
+	expects a field name string, and crashed with `AttributeError: 'dict'
+	object has no attribute 'lower'` — observed live on get_batch_count.
+	"""
+	if not or_filters:
+		return frappe.db.count(doctype, filters)
+	return len(
+		frappe.get_all(
+			doctype,
+			filters=filters,
+			or_filters=or_filters,
+			fields=["name"],
+			limit_page_length=0,
+		)
+	)
 
 
 def as_filter_conditions(filters: dict) -> list:

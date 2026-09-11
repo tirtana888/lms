@@ -1043,10 +1043,18 @@ def update_chapter_index(chapter: str, course: str, idx: int):
 		frappe.db.set_value("Chapter Reference", {"chapter": chapter_name, "parent": course}, "idx", i + 1)
 
 
-# Matches SETTINGS_PAGE_LENGTH in the frontend, which pages `start` by this.
+# Matches MEMBERS_PAGE_LENGTH in the frontend, which pages `start` by this.
 MEMBERS_PAGE_LENGTH = 13
 
-MEMBER_FIELDS = ["name", "full_name", "user_image", "username", "last_active"]
+MEMBER_FIELDS = [
+	"name",
+	"full_name",
+	"user_image",
+	"username",
+	"last_active",
+	"creation",
+	"_user_tags",
+]
 
 
 def member_roles(member: str) -> list[str]:
@@ -1124,7 +1132,41 @@ def get_members(start: int = 0, search: str = None, role: str = "All"):
 	for member in members:
 		member.roles = member_roles(member.name)
 
+	attach_batches(members)
+
 	return members
+
+
+def attach_batches(members: list) -> None:
+	"""Sets `.batches` (titles, not names) on each row in place.
+
+	One query for the whole page rather than one per row: `get_members` is a
+	paginated list, and a per-row lookup would multiply with page size.
+	"""
+	member_names = [member.name for member in members]
+	if not member_names:
+		return
+
+	enrollments = frappe.get_all(
+		"LMS Batch Enrollment", {"member": ["in", member_names]}, ["member", "batch"]
+	)
+	if not enrollments:
+		for member in members:
+			member.batches = []
+		return
+
+	batch_names = {enrollment.batch for enrollment in enrollments}
+	titles = frappe.get_all("LMS Batch", {"name": ["in", list(batch_names)]}, ["name", "title"])
+	title_by_batch = {row.name: row.title for row in titles}
+
+	batches_by_member: dict = {}
+	for enrollment in enrollments:
+		batches_by_member.setdefault(enrollment.member, []).append(
+			title_by_batch.get(enrollment.batch, enrollment.batch)
+		)
+
+	for member in members:
+		member.batches = batches_by_member.get(member.name, [])
 
 
 @frappe.whitelist()

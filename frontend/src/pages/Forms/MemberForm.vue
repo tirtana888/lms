@@ -245,6 +245,7 @@
 <script setup lang="ts">
 import { call, createResource, FormControl, TabButtons, toast } from 'frappe-ui'
 import { computed, inject, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useOnboarding, useTelemetry } from 'frappe-ui/frappe'
 import BooleanSwitch from '@/components/Controls/BooleanSwitch.vue'
 import FormShell from '@/components/FormShell.vue'
@@ -336,7 +337,13 @@ const roles = reactive({
 const initialRoles = reactive({ ...roles })
 const submitting = ref(false)
 
-const activeTab = ref<'Roles' | 'Overview'>('Roles')
+// Members.vue's name link opens straight onto Overview (LearnWorlds-style
+// "click a user, see their detail"); the "..." menu's Edit member still opens
+// plain, no query, so it lands on Roles as it always has.
+const route = useRoute()
+const activeTab = ref<'Roles' | 'Overview'>(
+	route.query.tab === 'Overview' ? 'Overview' : 'Roles'
+)
 
 const overviewFetch = createResource({
 	url: 'lms.lms.api.get_member_overview',
@@ -350,11 +357,24 @@ const overview = computed<MemberOverview | null>(() => overviewFetch.data ?? nul
 
 // Lazy: most edits here only touch Roles, so this only runs once someone
 // actually opens the Overview tab, not on every dialog open.
-watch(activeTab, (tab) => {
-	if (tab === 'Overview' && isEdit.value && !overviewFetch.data && !overviewFetch.loading) {
-		overviewFetch.fetch()
-	}
-})
+// `immediate` matters now: a click from Members.vue's name link lands here
+// with activeTab already 'Overview' on the very first render, not via a later
+// change — a plain watch would never see that as a transition and the data
+// would never be fetched.
+watch(
+	activeTab,
+	(tab) => {
+		if (
+			tab === 'Overview' &&
+			isEdit.value &&
+			!overviewFetch.data &&
+			!overviewFetch.loading
+		) {
+			overviewFetch.fetch()
+		}
+	},
+	{ immediate: true }
+)
 
 function formatDate(value: string | null | undefined, withTime = false): string {
 	if (!value) return __('Never')
