@@ -51,6 +51,11 @@ export class Scorm {
 	}
 
 	renderUploader() {
+		console.error('[SCORM DEBUG] renderUploader config snapshot', {
+			course: this.config?.course,
+			docname: this.config?.docname,
+			configRef: this.config,
+		})
 		// `config` (not a snapshot of its fields) so the uploader keeps seeing
 		// `docname` update once this brand-new lesson is first saved — see the
 		// comment in ScormUploadPlugin.vue.

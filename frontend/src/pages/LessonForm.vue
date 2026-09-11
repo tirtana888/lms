@@ -126,6 +126,7 @@ import {
 	ref,
 	nextTick,
 	onBeforeUnmount,
+	watch,
 } from 'vue'
 import { ChevronRight, NotebookPen } from 'lucide-vue-next'
 import { useDebounceFn } from '@vueuse/core'
@@ -250,7 +251,19 @@ const props = defineProps({
 	},
 })
 
-contentUploadContext.course = props.courseName
+// Reactive rather than a one-time assignment: CourseEditor.vue passes
+// `props.course.data.name`, which can still be resolving when this form
+// mounts (the async course resource), so a single assignment here could
+// freeze `course` on an empty value forever. watch(..., {immediate:true})
+// keeps it in sync with the actual prop for as long as this form is open.
+watch(
+	() => props.courseName,
+	(value) => {
+		contentUploadContext.course = value
+		console.error('[SCORM DEBUG] contentUploadContext.course set to', value)
+	},
+	{ immediate: true }
+)
 
 const isDirty = ref(false)
 // Set once the Course Lesson exists. Its Lesson Reference is a second request,
@@ -339,6 +352,10 @@ const lessonDetails = createResource({
 				: false
 			contentUploadContext.docname = data.lesson.name
 			instructorUploadContext.docname = data.lesson.name
+			console.error('[SCORM DEBUG] contentUploadContext now', {
+				course: contentUploadContext.course,
+				docname: contentUploadContext.docname,
+			})
 			nextTick(autoGrowTitle)
 			Promise.all([addLessonContent(data), addInstructorNotes(data)]).then(
 				() => {
