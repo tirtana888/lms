@@ -101,16 +101,28 @@
 										'Batch stays visible in listings, but students must enter this code to enroll.'
 									)
 								"
+								@update:modelValue="onToggleAccessCode"
 							/>
-							<FormControl
+							<div
 								v-if="batchDetail.doc.require_access_code"
-								v-model="batchDetail.doc.access_code"
-								type="text"
-								maxlength="6"
-								:label="__('Access Code')"
-								:placeholder="__('6-digit code')"
-								variant="outline"
-							/>
+								class="flex items-center gap-2"
+							>
+								<span class="text-p-sm text-ink-gray-6">{{
+									__('Access Code')
+								}}</span>
+								<span
+									class="font-mono text-base-medium tracking-widest px-3 py-1.5 rounded border border-outline-gray-2 bg-surface-gray-1 text-ink-gray-9"
+								>
+									{{ batchDetail.doc.access_code }}
+								</span>
+								<Button
+									size="sm"
+									variant="subtle"
+									@click="regenerateAccessCode"
+								>
+									{{ __('Regenerate') }}
+								</Button>
+							</div>
 						</div>
 						<div class="space-y-4">
 							<BooleanSwitch
@@ -318,6 +330,7 @@ import {
 	nextTick,
 } from 'vue'
 import {
+	Button,
 	Combobox,
 	FormControl,
 	createDocumentResource,
@@ -330,6 +343,7 @@ import { useDebounceFn } from '@vueuse/core'
 import BooleanSwitch from '@/components/Controls/BooleanSwitch.vue'
 import {
 	createLMSCategory,
+	generateAccessCode,
 	getMetaInfo,
 	openSettings,
 	updateMetaInfo,
@@ -390,6 +404,22 @@ const batchDetail = createDocumentResource({
 	name: props.batch.data?.name,
 	auto: true,
 }) as Resource<LMSBatch | null>
+
+// Auto-generated only, never hand-typed: a wrong-length or non-digit code
+// would otherwise only surface as a server-side throw on save. Filling it
+// in the moment the switch turns on means there's never a state where the
+// toggle is on and the code is blank. Dirty-tracking here is automatic
+// (diffed against originalDoc below), so no separate markDirty call.
+const onToggleAccessCode = (val: boolean): void => {
+	if (val && batchDetail.doc && !batchDetail.doc.access_code) {
+		batchDetail.doc.access_code = generateAccessCode()
+	}
+}
+
+const regenerateAccessCode = (): void => {
+	if (!batchDetail.doc) return
+	batchDetail.doc.access_code = generateAccessCode()
+}
 
 const openEmailTemplateForm = (): void => {
 	openBatchForm(

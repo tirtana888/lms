@@ -31,19 +31,19 @@
 							'Course stays visible in listings, but students must enter this code to enroll.'
 						)
 					"
-					@update:modelValue="markDirty()"
+					@update:modelValue="onToggleAccessCode"
 				/>
-				<FormControl
-					v-if="doc?.require_access_code"
-					v-model="doc.access_code"
-					type="text"
-					maxlength="6"
-					:label="__('Access code')"
-					:placeholder="__('6-digit code')"
-					variant="outline"
-					:required="true"
-					@input="markDirty()"
-				/>
+				<div v-if="doc?.require_access_code" class="flex items-center gap-2">
+					<span class="text-p-sm text-ink-gray-6">{{ __('Access code') }}</span>
+					<span
+						class="font-mono text-base-medium tracking-widest px-3 py-1.5 rounded border border-outline-gray-2 bg-surface-gray-1 text-ink-gray-9"
+					>
+						{{ doc.access_code }}
+					</span>
+					<Button size="sm" variant="subtle" @click="regenerateAccessCode">
+						{{ __('Regenerate') }}
+					</Button>
+				</div>
 				<BooleanSwitch
 					size="sm"
 					v-model="doc.enforce_lesson_completion"
@@ -218,7 +218,7 @@
 </template>
 
 <script setup lang="ts">
-import { Dialog, FormControl, createResource } from 'frappe-ui'
+import { Button, Dialog, FormControl, createResource } from 'frappe-ui'
 import BooleanSwitch from '@/components/Controls/BooleanSwitch.vue'
 import { computed, inject, ref } from 'vue'
 import CollapsibleSection from '@/components/CollapsibleSection.vue'
@@ -227,6 +227,7 @@ import NewMemberModal from '@/components/Modals/NewMemberModal.vue'
 import { useSettings } from '@/stores/settings'
 import type { CourseFormContext, Resource } from '@/types'
 import { openExternal } from '@/utils/openExternal'
+import { generateAccessCode } from '@/utils'
 
 const { resource, markDirty } = inject<CourseFormContext>('courseForm')!
 const dayjs = inject('$dayjs') as typeof import('dayjs')
@@ -259,6 +260,23 @@ const selfEnrollment = computed<boolean>({
 		markDirty()
 	},
 })
+
+// Auto-generated only, never hand-typed: a wrong-length or non-digit code
+// would otherwise only surface as a server-side throw on save. Filling it
+// in the moment the switch turns on means there's never a state where the
+// toggle is on and the code is blank.
+function onToggleAccessCode(val: boolean) {
+	if (val && resource.doc && !resource.doc.access_code) {
+		resource.doc.access_code = generateAccessCode()
+	}
+	markDirty()
+}
+
+function regenerateAccessCode() {
+	if (!resource.doc) return
+	resource.doc.access_code = generateAccessCode()
+	markDirty()
+}
 
 function setPaidCourse(val: boolean) {
 	if (!resource.doc) return

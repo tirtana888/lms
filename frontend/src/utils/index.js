@@ -1040,3 +1040,11 @@ export { decodeEntities, htmlToText } from './inertHtml'
 export function validateEmail(email) {
 	return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || '').trim())
 }
+
+// Shared by CoursePublishSettings.vue and BatchForm.vue's "Require access
+// code" toggle: zero-padded so a code starting with 0 is still a real
+// 6-digit string, matching the isdigit()-and-len==6 check the server runs
+// in validate_access_code_format (lms/lms/utils.py).
+export function generateAccessCode() {
+	return String(Math.floor(Math.random() * 1000000)).padStart(6, '0')
+}
