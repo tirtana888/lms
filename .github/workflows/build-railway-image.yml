@@ -37,11 +37,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Encode apps.json
-        id: apps
-        run: |
-          echo "base64=$(base64 -w 0 lms/railway/apps.json)" >> "$GITHUB_OUTPUT"
-
       - name: Build bench image (frappe + payments + lms)
         uses: docker/build-push-action@v5
         with:
@@ -54,7 +49,8 @@ jobs:
             FRAPPE_BRANCH=version-15
             PYTHON_VERSION=3.11.6
             NODE_VERSION=18.20.2
-            APPS_JSON_BASE64=${{ steps.apps.outputs.base64 }}
+          secret-files: |
+            apps_json=lms/railway/apps.json
 
       - name: Build Railway app image (nginx + supervisord wrapper)
         uses: docker/build-push-action@v5
