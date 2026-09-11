@@ -2,7 +2,7 @@ name: Build Railway image
 
 on:
   push:
-    branches: [main]
+    branches: [develop]
     paths:
       - "railway/**"
       - ".github/workflows/build-railway-image.yml"
