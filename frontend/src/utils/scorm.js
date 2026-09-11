@@ -51,18 +51,25 @@ export class Scorm {
 	}
 
 	renderUploader() {
-		const app = createApp(ScormUploadPlugin, {
-			course: this.config.course,
-			lesson: this.config.docname,
+		// `config` (not a snapshot of its fields) so the uploader keeps seeing
+		// `docname` update once this brand-new lesson is first saved — see the
+		// comment in ScormUploadPlugin.vue.
+		this.app = createApp(ScormUploadPlugin, {
+			config: this.config,
 			onUploaded: (data) => {
 				this.data = data
+				// Tear down the uploader app before clearing its DOM: replaceChildren
+				// alone would strip the element Vue is managing out from under it
+				// without ever unmounting, leaking the instance.
+				this.app?.unmount()
+				this.app = null
 				this.wrapper.replaceChildren()
 				this.renderSummary()
 			},
 		})
-		registerDirectives(app)
-		app.use(translationPlugin)
-		app.mount(this.wrapper)
+		registerDirectives(this.app)
+		this.app.use(translationPlugin)
+		this.app.mount(this.wrapper)
 	}
 
 	// Editing mode, package already uploaded: show a static summary rather than

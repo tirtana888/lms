@@ -1,6 +1,10 @@
 <template>
 	<div v-if="!course || !lesson" class="mb-4 text-sm text-ink-gray-5">
-		{{ __('Save the lesson before adding a SCORM package.') }}
+		{{
+			__(
+				'Press Ctrl+S (Cmd+S on Mac) to save this lesson, then come back to add the SCORM package.'
+			)
+		}}
 	</div>
 	<FileUploader
 		v-else
@@ -20,22 +24,27 @@
 </template>
 <script setup>
 import { Button, FileUploader, call, toast } from 'frappe-ui'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
+// `config` is the same reactive uploadContext object LessonForm.vue passes
+// into every editor tool (see utils/upload.js's identical `this.config`
+// pattern) - read through computed()s rather than destructured once, so
+// this block picks up `docname` the moment the lesson is first saved,
+// instead of staying stuck on whatever it saw when the block was created
+// (before the lesson - and its name - existed).
 const props = defineProps({
-	course: {
-		type: String,
-		default: null,
-	},
-	lesson: {
-		type: String,
-		default: null,
+	config: {
+		type: Object,
+		default: () => ({}),
 	},
 	onUploaded: {
 		type: Function,
 		required: true,
 	},
 })
+
+const course = computed(() => props.config?.course)
+const lesson = computed(() => props.config?.docname)
 
 const extracting = ref(false)
 
@@ -55,8 +64,8 @@ const onFileUploaded = async (file) => {
 	extracting.value = true
 	try {
 		const data = await call('lms.lms.api.upload_lesson_scorm', {
-			course: props.course,
-			lesson: props.lesson,
+			course: course.value,
+			lesson: lesson.value,
 			scorm_package: file,
 		})
 		props.onUploaded(data)
