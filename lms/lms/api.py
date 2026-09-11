@@ -1127,6 +1127,77 @@ def get_members(start: int = 0, search: str = None, role: str = "All"):
 	return members
 
 
+@frappe.whitelist()
+def get_member_overview(member: str):
+	"""Consolidated read-only snapshot for the member detail view.
+
+	Everything here already exists elsewhere (User's own login fields,
+	Activity Log, LMS Enrollment/Quiz Submission/Certificate/Program Member) —
+	this just gathers it into one call instead of adding new tracking.
+	"""
+	frappe.only_for(["Moderator"])
+
+	if not isinstance(member, str):
+		frappe.throw(_("Invalid member."), frappe.ValidationError)
+
+	member = member.strip()
+	if not member or member in ["Administrator", "Guest"]:
+		frappe.throw(_("Invalid member."), frappe.ValidationError)
+
+	user = frappe.db.get_value(
+		"User", member, ["last_login", "last_active", "last_ip", "_user_tags"], as_dict=True
+	)
+	if not user:
+		frappe.throw(_("Member {0} does not exist.").format(member), frappe.DoesNotExistError)
+
+	enrollments = frappe.get_all(
+		"LMS Enrollment", {"member": member}, ["course", "progress", "creation"], order_by="creation desc"
+	)
+	quiz_submissions = frappe.get_all(
+		"LMS Quiz Submission",
+		{"member": member},
+		["quiz", "course", "percentage", "creation"],
+		order_by="creation desc",
+	)
+	certificates = frappe.get_all(
+		"LMS Certificate", {"member": member}, ["course", "issue_date"], order_by="issue_date desc"
+	)
+	programs = frappe.get_all("LMS Program Member", {"member": member}, ["parent", "progress"])
+	for program in programs:
+		program.program = program.pop("parent")
+
+	recent_logins = frappe.get_all(
+		"Activity Log",
+		{"user": member, "operation": "Login", "status": "Success"},
+		["creation", "ip_address"],
+		order_by="creation desc",
+		limit_page_length=10,
+	)
+
+	# Course names are slugs, not something to show as-is — fetch titles for
+	# every course referenced above in one query rather than one per row.
+	course_names = {row.course for row in enrollments + quiz_submissions + certificates if row.course}
+	titles = frappe.get_all("LMS Course", {"name": ["in", list(course_names) or [""]]}, ["name", "title"])
+	title_by_course = {row.name: row.title for row in titles}
+	for row in enrollments + quiz_submissions + certificates:
+		row.course_title = title_by_course.get(row.course, row.course)
+
+	scored = [row.percentage for row in quiz_submissions if row.percentage is not None]
+
+	return {
+		"last_login": user.last_login,
+		"last_active": user.last_active,
+		"last_ip": user.last_ip,
+		"tags": [tag for tag in (user._user_tags or "").split(",") if tag],
+		"enrollments": enrollments,
+		"quiz_submissions": quiz_submissions[:20],
+		"avg_quiz_score": round(sum(scored) / len(scored), 2) if scored else None,
+		"certificates": certificates,
+		"programs": programs,
+		"recent_logins": recent_logins,
+	}
+
+
 def check_app_permission():
 	"""Check if the user has permission to access the app."""
 	if frappe.session.user == "Administrator":

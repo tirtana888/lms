@@ -8,7 +8,168 @@
 			<div v-if="refusal" class="p-4 text-base text-ink-gray-6">
 				{{ refusal }}
 			</div>
-			<div v-else data-testid="member-fields" class="space-y-4">
+			<template v-else>
+				<TabButtons
+					v-if="isEdit"
+					class="mb-4 inline-block"
+					:options="[
+						{ label: __('Roles'), value: 'Roles' },
+						{ label: __('Overview'), value: 'Overview' },
+					]"
+					v-model="activeTab"
+				/>
+				<div
+					v-if="activeTab === 'Overview' && isEdit"
+					data-testid="member-overview"
+					class="space-y-5"
+				>
+					<div v-if="overviewFetch.loading" class="text-p-sm text-ink-gray-5">
+						{{ __('Loading...') }}
+					</div>
+					<template v-else-if="overview">
+						<div class="grid grid-cols-2 gap-4 text-p-sm">
+							<div>
+								<div class="text-ink-gray-5">{{ __('Last login') }}</div>
+								<div class="text-ink-gray-9">
+									{{ formatDate(overview.last_login) }}
+								</div>
+							</div>
+							<div>
+								<div class="text-ink-gray-5">{{ __('Last active') }}</div>
+								<div class="text-ink-gray-9">
+									{{ formatDate(overview.last_active) }}
+								</div>
+							</div>
+							<div>
+								<div class="text-ink-gray-5">{{ __('Last IP') }}</div>
+								<div class="text-ink-gray-9">{{ overview.last_ip || '—' }}</div>
+							</div>
+							<div>
+								<div class="text-ink-gray-5">{{ __('Avg. quiz score') }}</div>
+								<div class="text-ink-gray-9">
+									{{
+										overview.avg_quiz_score != null
+											? overview.avg_quiz_score + '%'
+											: '—'
+									}}
+								</div>
+							</div>
+						</div>
+
+						<div v-if="overview.tags.length" class="flex flex-wrap gap-1.5">
+							<span
+								v-for="tag in overview.tags"
+								:key="tag"
+								class="rounded bg-surface-gray-2 px-2 py-0.5 text-p-xs text-ink-gray-7"
+							>
+								{{ tag }}
+							</span>
+						</div>
+
+						<div>
+							<div class="text-p-sm-medium text-ink-gray-7 mb-2">
+								{{ __('Courses') }} ({{ overview.enrollments.length }})
+							</div>
+							<div
+								v-if="!overview.enrollments.length"
+								class="text-p-sm text-ink-gray-5"
+							>
+								{{ __('No enrollments yet.') }}
+							</div>
+							<div v-else class="space-y-1.5">
+								<div
+									v-for="row in overview.enrollments"
+									:key="row.course"
+									class="flex items-center justify-between text-p-sm"
+								>
+									<span class="text-ink-gray-8">{{ row.course_title }}</span>
+									<span class="text-ink-gray-5">{{ row.progress }}%</span>
+								</div>
+							</div>
+						</div>
+
+						<div>
+							<div class="text-p-sm-medium text-ink-gray-7 mb-2">
+								{{ __('Quiz submissions') }} ({{ overview.quiz_submissions.length }})
+							</div>
+							<div
+								v-if="!overview.quiz_submissions.length"
+								class="text-p-sm text-ink-gray-5"
+							>
+								{{ __('No quiz submissions yet.') }}
+							</div>
+							<div v-else class="space-y-1.5">
+								<div
+									v-for="(row, idx) in overview.quiz_submissions"
+									:key="idx"
+									class="flex items-center justify-between text-p-sm"
+								>
+									<span class="text-ink-gray-8">{{ row.quiz }}</span>
+									<span class="text-ink-gray-5">{{ row.percentage }}%</span>
+								</div>
+							</div>
+						</div>
+
+						<div>
+							<div class="text-p-sm-medium text-ink-gray-7 mb-2">
+								{{ __('Certificates') }} ({{ overview.certificates.length }})
+							</div>
+							<div
+								v-if="!overview.certificates.length"
+								class="text-p-sm text-ink-gray-5"
+							>
+								{{ __('No certificates yet.') }}
+							</div>
+							<div v-else class="space-y-1.5">
+								<div
+									v-for="row in overview.certificates"
+									:key="row.course"
+									class="flex items-center justify-between text-p-sm"
+								>
+									<span class="text-ink-gray-8">{{ row.course_title }}</span>
+									<span class="text-ink-gray-5">{{
+										formatDate(row.issue_date)
+									}}</span>
+								</div>
+							</div>
+						</div>
+
+						<div v-if="overview.programs.length">
+							<div class="text-p-sm-medium text-ink-gray-7 mb-2">
+								{{ __('Programs') }}
+							</div>
+							<div class="space-y-1.5">
+								<div
+									v-for="row in overview.programs"
+									:key="row.program"
+									class="flex items-center justify-between text-p-sm"
+								>
+									<span class="text-ink-gray-8">{{ row.program }}</span>
+									<span class="text-ink-gray-5">{{ row.progress }}%</span>
+								</div>
+							</div>
+						</div>
+
+						<div v-if="overview.recent_logins.length">
+							<div class="text-p-sm-medium text-ink-gray-7 mb-2">
+								{{ __('Recent logins') }}
+							</div>
+							<div class="space-y-1.5">
+								<div
+									v-for="(row, idx) in overview.recent_logins"
+									:key="idx"
+									class="flex items-center justify-between text-p-sm"
+								>
+									<span class="text-ink-gray-8">{{
+										formatDate(row.creation, true)
+									}}</span>
+									<span class="text-ink-gray-5">{{ row.ip_address }}</span>
+								</div>
+							</div>
+						</div>
+					</template>
+				</div>
+				<div v-else data-testid="member-fields" class="space-y-4">
 				<FormControl
 					v-model="member.email"
 					:label="__('Email')"
@@ -62,9 +223,13 @@
 					</div>
 				</div>
 			</div>
+			</template>
 		</template>
 		<template #actions>
-			<div v-if="!refusal" class="flex items-center justify-end">
+			<div
+				v-if="!refusal && activeTab !== 'Overview'"
+				class="flex items-center justify-end"
+			>
 				<HeaderButton
 					data-testid="member-save"
 					:label="__('Save')"
@@ -78,7 +243,7 @@
 	</FormShell>
 </template>
 <script setup lang="ts">
-import { call, createResource, FormControl, toast } from 'frappe-ui'
+import { call, createResource, FormControl, TabButtons, toast } from 'frappe-ui'
 import { computed, inject, onMounted, reactive, ref, watch } from 'vue'
 import { useOnboarding, useTelemetry } from 'frappe-ui/frappe'
 import BooleanSwitch from '@/components/Controls/BooleanSwitch.vue'
@@ -90,6 +255,31 @@ import { cleanError } from '@/utils'
 import type { Resource, SessionUser } from '@/types'
 
 type MemberRow = { name: string; roles?: string[] }
+
+type MemberOverviewRow = {
+	course?: string
+	course_title?: string
+	progress?: number
+	quiz?: string
+	percentage?: number
+	issue_date?: string
+	program?: string
+	creation?: string
+	ip_address?: string
+}
+
+type MemberOverview = {
+	last_login: string | null
+	last_active: string | null
+	last_ip: string | null
+	tags: string[]
+	enrollments: MemberOverviewRow[]
+	quiz_submissions: MemberOverviewRow[]
+	avg_quiz_score: number | null
+	certificates: MemberOverviewRow[]
+	programs: MemberOverviewRow[]
+	recent_logins: MemberOverviewRow[]
+}
 
 const props = defineProps<{ memberID: string }>()
 
@@ -149,6 +339,33 @@ const roles = reactive({
 
 const initialRoles = reactive({ ...roles })
 const submitting = ref(false)
+
+const activeTab = ref<'Roles' | 'Overview'>('Roles')
+
+const overviewFetch = createResource({
+	url: 'lms.lms.api.get_member_overview',
+	makeParams() {
+		return { member: props.memberID }
+	},
+	auto: false,
+}) as unknown as Resource<MemberOverview | null>
+
+const overview = computed<MemberOverview | null>(() => overviewFetch.data ?? null)
+
+// Lazy: most edits here only touch Roles, so this only runs once someone
+// actually opens the Overview tab, not on every dialog open.
+watch(activeTab, (tab) => {
+	if (tab === 'Overview' && isEdit.value && !overviewFetch.data && !overviewFetch.loading) {
+		overviewFetch.fetch()
+	}
+})
+
+function formatDate(value: string | null | undefined, withTime = false): string {
+	if (!value) return __('Never')
+	const date = new Date(value.replace(' ', 'T'))
+	if (Number.isNaN(date.getTime())) return value
+	return withTime ? date.toLocaleString() : date.toLocaleDateString()
+}
 
 // C4 — edit mode used to be seeded from the row Members.vue already held in
 // memory, which on a cold deep link does not exist.
