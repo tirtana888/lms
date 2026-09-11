@@ -184,7 +184,14 @@ function autoGrowTitle() {
 }
 
 // reactive so the upload block picks up `docname` once the lesson is saved.
-const contentUploadContext = reactive({ docname: null, fieldname: 'content' })
+// `course` starts null and is filled in below, once `props` exists (defineProps
+// is declared further down this file) — the SCORM block tool needs it alongside
+// `docname` to call upload_lesson_scorm.
+const contentUploadContext = reactive({
+	docname: null,
+	fieldname: 'content',
+	course: null,
+})
 const instructorUploadContext = reactive({
 	docname: null,
 	fieldname: 'instructor_content',
@@ -242,6 +249,8 @@ const props = defineProps({
 		required: true,
 	},
 })
+
+contentUploadContext.course = props.courseName
 
 const isDirty = ref(false)
 // Set once the Course Lesson exists. Its Lesson Reference is a second request,

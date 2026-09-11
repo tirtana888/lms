@@ -1683,6 +1683,88 @@ def get_launch_file(extract_path: str):
 	return launch_file
 
 
+# === Lesson-level SCORM (embedded as an editor block, alongside Quiz/Assignment/
+# Programming Exercise) — separate disk root and URL prefix from the chapter-level
+# SCORM above (private/scorm/<course>/<title>/ + /scorm/...), so the two never
+# collide and the chapter path above needed zero changes. Reuses get_manifest_file
+# / get_launch_file / _scorm_url unchanged — those are already generic.
+#
+# Keyed by the lesson's docname rather than a title: a Course Lesson name is a
+# controlled autoname ("{####} {title}"), already validated to exist by the Link
+# lookup below, so it does not need the chapter path's raw-title traversal guard
+# — but the realpath containment check is kept anyway as a second line of
+# defence, cheap insurance against a future caller passing something unchecked.
+def _scorm_extract_path_lesson(course: str, lesson: str) -> str:
+	scorm_root = os.path.realpath(frappe.get_site_path("private", "scorm-lesson"))
+	course_root = os.path.realpath(frappe.get_site_path("private", "scorm-lesson", course))
+	if not course_root.startswith(scorm_root + os.sep):
+		frappe.throw(_("Invalid course or lesson name"))
+
+	extract_path = os.path.realpath(os.path.join(course_root, lesson))
+	if not extract_path.startswith(course_root + os.sep):
+		frappe.throw(_("Invalid course or lesson name"))
+
+	return extract_path
+
+
+def extract_lesson_package(course: str, lesson: str, scorm_package: dict):
+	package = frappe.get_doc("File", scorm_package.name)
+	zip_path = package.get_full_path()
+	extract_path = _scorm_extract_path_lesson(course, lesson)
+
+	# Clear any previously extracted package so a re-upload doesn't leave stale
+	# files served (path confirmed under the course dir above).
+	if os.path.exists(extract_path):
+		shutil.rmtree(extract_path)
+
+	with zipfile.ZipFile(zip_path, "r") as zf:
+		dest = os.path.realpath(extract_path)
+		for info in zf.infolist():
+			if stat.S_ISLNK(info.external_attr >> 16):
+				frappe.throw(_("Invalid file path in package"))
+			target = os.path.realpath(os.path.join(extract_path, info.filename))
+			if not target.startswith(dest + os.sep) and target != dest:
+				frappe.throw(_("Invalid file path in package"))
+		zf.extractall(extract_path)
+
+	return extract_path
+
+
+@frappe.whitelist()
+def upload_lesson_scorm(course: str, lesson: str, scorm_package: dict):
+	"""Extract a SCORM zip for a single lesson block and return the reference the
+	editor's Scorm tool stores in the lesson's own body JSON (same shape a Quiz
+	block stores {quiz: name} in — no new Course Lesson fields needed).
+	"""
+	if not isinstance(course, str):
+		frappe.throw(_("course must be a string"))
+	if not isinstance(lesson, str):
+		frappe.throw(_("lesson must be a string"))
+	if not can_modify_course(course):
+		frappe.throw(_("You do not have permission to modify this lesson."), frappe.PermissionError)
+	if not frappe.db.exists("Course Lesson", {"name": lesson, "course": course}):
+		frappe.throw(_("Lesson does not belong to this course."))
+
+	scorm_package = frappe._dict(scorm_package or {})
+	if not scorm_package.get("name"):
+		frappe.throw(_("Please attach a SCORM package."))
+	if not isinstance(scorm_package.name, str):
+		frappe.throw(_("scorm_package name must be a string"))
+
+	extract_path = extract_lesson_package(course, lesson, scorm_package)
+	manifest_file = get_manifest_file(extract_path)
+	launch_file = get_launch_file(extract_path)
+	if not launch_file:
+		frappe.throw(_("Could not find a launch file in this SCORM package."))
+
+	return {
+		"scorm_package": scorm_package.name,
+		"scorm_package_path": _scorm_url(extract_path),
+		"manifest_file": _scorm_url(manifest_file) if manifest_file else None,
+		"launch_file": _scorm_url(launch_file),
+	}
+
+
 def add_lesson(title: str, chapter: str, course: str, idx: int):
 	lesson = frappe.new_doc("Course Lesson")
 	lesson.update(

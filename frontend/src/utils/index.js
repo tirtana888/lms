@@ -3,6 +3,7 @@ import { Quiz } from '@/utils/quiz'
 import { Program } from '@/utils/program'
 import { Assignment } from '@/utils/assignment'
 import { Upload } from '@/utils/upload'
+import { Scorm } from '@/utils/scorm'
 import { Markdown } from '@/utils/markdownParser'
 import { useSettings } from '@/stores/settings'
 import { usersStore } from '@/stores/user'
@@ -157,6 +158,10 @@ export function getEditorTools(
 		},
 		upload: {
 			class: Upload,
+			config: uploadContext,
+		},
+		scorm: {
+			class: Scorm,
 			config: uploadContext,
 		},
 		table: {

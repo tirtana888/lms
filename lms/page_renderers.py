@@ -116,3 +116,95 @@ class SCORMRenderer(BaseRenderer):
 				if correct_file_path and self._is_safe_path(correct_file_path):
 					return self._serve_file(correct_file_path)
 		return None
+
+
+class LessonSCORMRenderer(BaseRenderer):
+	"""Serves a SCORM package embedded as a lesson editor block (Scorm tool,
+	alongside Quiz/Assignment/Programming Exercise), as opposed to the
+	whole-chapter-is-a-SCORM-package flow SCORMRenderer above handles.
+
+	A separate class rather than folding this into SCORMRenderer: this path's
+	permission check maps straight onto a single Course Lesson (no "which
+	lesson does this chapter's SCORM package belong to" indirection), and
+	keeping it separate means the existing class above needed zero changes —
+	its own tests and legacy public/scorm fallback are untouched.
+
+	URL shape: scorm-lesson/<course>/<lesson>/... — "scorm-lesson/" is not a
+	substring of "scorm/", so SCORMRenderer.can_render() never matches these
+	paths and this class never matches chapter ones; the two coexist without
+	either needing to know the other exists.
+	"""
+
+	def can_render(self):
+		return "scorm-lesson/" in self.path
+
+	def _check_permission(self):
+		from lms.lms.permissions import can_access_lesson, get_locked_lessons
+
+		parts = self.path.strip("/").split("/")
+		# scorm-lesson/<course>/<lesson>/...
+		if len(parts) < 3 or parts[0] != "scorm-lesson":
+			raise frappe.PermissionError
+		course, lesson = unquote(parts[1]), unquote(parts[2])
+
+		if not frappe.db.exists("Course Lesson", {"name": lesson, "course": course}):
+			raise frappe.PermissionError
+
+		# Same rule as the chapter path: can_access_lesson alone is lock-unaware,
+		# so a sequential/drip-gated lesson still needs the explicit lock check
+		# or this route reads the SCORM bytes before the lesson itself opens.
+		if not can_access_lesson(lesson) or lesson in get_locked_lessons(course):
+			frappe.logger("lms.security").warning(
+				"Lesson SCORM resource access denied: user=%s path=%s",
+				frappe.session.user,
+				self.path,
+			)
+			raise frappe.PermissionError
+
+	def _is_safe_path(self, path):
+		resolved = os.path.realpath(path)
+		scorm_root = os.path.realpath(os.path.join(frappe.local.site_path, "private", "scorm-lesson"))
+		return resolved == scorm_root or resolved.startswith(scorm_root + os.sep)
+
+	def _serve_file(self, path):
+		f = open(path, "rb")
+		response = Response(wrap_file(frappe.local.request.environ, f), direct_passthrough=True)
+		response.mimetype = mimetypes.guess_type(path)[0]
+		return response
+
+	def render(self):
+		self._check_permission()
+		path = os.path.join(frappe.local.site_path, "private", self.path.lstrip("/"))
+
+		if not self._is_safe_path(path):
+			raise frappe.PermissionError
+
+		extension = os.path.splitext(path)[1]
+		if not extension:
+			path = f"{path}.html"
+
+		if os.path.exists(path) and os.path.isfile(path):
+			return self._serve_file(path)
+
+		path = path.replace(".html", "")
+		if os.path.exists(path) and os.path.isdir(path):
+			index_path = os.path.join(path, "index.html")
+			if os.path.exists(index_path):
+				return self._serve_file(index_path)
+			return None
+
+		# Fall back to a search within the lesson's own extracted folder, same
+		# as SCORMRenderer does for a SCORM package's internal asset paths.
+		lesson_folder = "/".join(self.path.split("/")[:3])
+		lesson_folder_path = os.path.realpath(frappe.get_site_path("private", lesson_folder))
+		if not self._is_safe_path(lesson_folder_path):
+			raise frappe.PermissionError
+
+		file = path.split("/")[-1]
+		for root, _dirs, files in os.walk(lesson_folder_path):
+			if file in files:
+				candidate = os.path.join(root, file)
+				if self._is_safe_path(candidate):
+					return self._serve_file(candidate)
+				break
+		return None
