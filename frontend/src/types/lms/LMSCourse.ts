@@ -25,6 +25,10 @@ export interface LMSCourse {
 	short_introduction: string
 	/**	Disable Self Learning : Check	*/
 	disable_self_learning?: 0 | 1
+	/**	Require Access Code : Check	*/
+	require_access_code?: 0 | 1
+	/**	Access Code : Data	*/
+	access_code?: string
 	/**	Enforce Lesson Completion : Check	*/
 	enforce_lesson_completion?: 0 | 1
 	/**	Preview Image : Attach Image	*/

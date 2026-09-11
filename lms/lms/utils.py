@@ -2730,6 +2730,19 @@ def get_payment_total(payment_doc: dict) -> float:
 	return flt(payment_doc.amount_with_gst) or flt(payment_doc.amount)
 
 
+def validate_access_code_format(doc):
+	"""Shared by LMS Course and LMS Batch: when require_access_code is on, the
+	code itself must actually be 6 digits, independent of whether any student
+	has tried to redeem it yet (LMSEnrollment/LMSBatchEnrollment check that
+	separately, against whatever value ends up stored here).
+	"""
+	if not doc.require_access_code:
+		return
+	code = (doc.access_code or "").strip()
+	if not (code.isdigit() and len(code) == 6):
+		frappe.throw(_("Access code must be exactly 6 digits."))
+
+
 def enroll_in_course(course: str, payment_name: str):
 	# The check below exists so a repeated payment callback is a no-op, and an
 	# unlocked check cannot deliver that: two callbacks arriving together both read
@@ -2754,12 +2767,37 @@ def enroll_in_course(course: str, payment_name: str):
 
 
 @frappe.whitelist()
-def enroll_in_batch(batch: str, payment_name: str = None):
+def enroll_in_free_course(course: str, code: str = None):
+	"""Self-enroll into a course that is not behind a payment. The frontend's
+	own insert used to go straight to frappe.client.insert on LMS Enrollment;
+	this exists only so a require_access_code course has somewhere server-side
+	to hand the entered code to LMSEnrollment.validate_course_enrollment_eligibility
+	(see create_enrollment's identical reasoning for the batch side) - every
+	other check (published, disable_self_learning, duplicate) still runs the
+	same way, inside the doctype's own before_insert.
+	"""
+	if not frappe.db.exists("LMS Course", course):
+		frappe.throw(_("The specified course does not exist."))
+
+	enrollment = frappe.new_doc("LMS Enrollment")
+	enrollment.update(
+		{
+			"member": frappe.session.user,
+			"course": course,
+		}
+	)
+	enrollment.flags.entered_access_code = code
+	enrollment.save(ignore_permissions=True)
+	return enrollment.name
+
+
+@frappe.whitelist()
+def enroll_in_batch(batch: str, payment_name: str = None, code: str = None):
 	if not frappe.db.exists("LMS Batch", batch):
 		frappe.throw(_("The specified batch does not exist."))
 
 	payment_doc = get_payment_details(payment_name)
-	create_enrollment(batch, payment_doc)
+	create_enrollment(batch, payment_doc, code)
 
 
 def get_payment_details(payment_name: str) -> dict:
@@ -2771,7 +2809,7 @@ def get_payment_details(payment_name: str) -> dict:
 	return payment_doc
 
 
-def create_enrollment(batch: str, payment_doc: dict = None):
+def create_enrollment(batch: str, payment_doc: dict = None, code: str = None):
 	new_student = frappe.new_doc("LMS Batch Enrollment")
 	new_student.update(
 		{
@@ -2779,6 +2817,10 @@ def create_enrollment(batch: str, payment_doc: dict = None):
 			"batch": batch,
 		}
 	)
+	# Not a real field: LMSBatchEnrollment.validate_access_code reads this off
+	# the in-memory doc. Never persisted, so redeeming a code never writes it
+	# to the database anywhere.
+	new_student.flags.entered_access_code = code
 
 	if payment_doc:
 		new_student.update(

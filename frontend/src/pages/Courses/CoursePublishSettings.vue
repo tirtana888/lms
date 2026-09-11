@@ -24,6 +24,28 @@
 				/>
 				<BooleanSwitch
 					size="sm"
+					v-model="doc.require_access_code"
+					:label="__('Require access code')"
+					:description="
+						__(
+							'Course stays visible in listings, but students must enter this code to enroll.'
+						)
+					"
+					@update:modelValue="markDirty()"
+				/>
+				<FormControl
+					v-if="doc?.require_access_code"
+					v-model="doc.access_code"
+					type="text"
+					maxlength="6"
+					:label="__('Access code')"
+					:placeholder="__('6-digit code')"
+					variant="outline"
+					:required="true"
+					@input="markDirty()"
+				/>
+				<BooleanSwitch
+					size="sm"
 					v-model="doc.enforce_lesson_completion"
 					:label="__('Enforce Lesson Completion')"
 					:description="

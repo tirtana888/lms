@@ -60,7 +60,14 @@ class LMSEnrollment(Document):
 		course_details = frappe.db.get_value(
 			"LMS Course",
 			self.course,
-			["published", "disable_self_learning", "paid_course", "paid_certificate"],
+			[
+				"published",
+				"disable_self_learning",
+				"paid_course",
+				"paid_certificate",
+				"require_access_code",
+				"access_code",
+			],
 			as_dict=True,
 		)
 
@@ -98,6 +105,11 @@ class LMSEnrollment(Document):
 
 			if not payment:
 				frappe.throw(_("You need to complete the payment for this course before enrolling."))
+
+		if course_details.require_access_code and not is_admin():
+			entered = (self.flags.entered_access_code or "").strip()
+			if not entered or entered != (course_details.access_code or "").strip():
+				frappe.throw(_("Invalid access code."))
 
 
 def is_admin():

@@ -23,6 +23,7 @@ from lms.lms.utils import (
 	get_quiz_details,
 	guest_access_allowed,
 	update_payment_record,
+	validate_access_code_format,
 )
 
 
@@ -39,6 +40,7 @@ class LMSBatch(Document):
 		self.validate_timetable()
 		self.validate_evaluation_end_date()
 		self.validate_conferencing_provider()
+		validate_access_code_format(self)
 
 	def on_update(self):
 		if self.has_value_changed("published") and self.published:

@@ -24,6 +24,8 @@
   "upcoming",
   "featured",
   "disable_self_learning",
+  "require_access_code",
+  "access_code",
   "enforce_lesson_completion",
   "section_break_18",
   "short_introduction",
@@ -95,6 +97,21 @@
    "fieldname": "disable_self_learning",
    "fieldtype": "Check",
    "label": "Disable Self Learning"
+  },
+  {
+   "default": "0",
+   "description": "The course still shows up in listings and search as usual but students must enter the code below to enroll.",
+   "fieldname": "require_access_code",
+   "fieldtype": "Check",
+   "label": "Require Access Code"
+  },
+  {
+   "depends_on": "require_access_code",
+   "fieldname": "access_code",
+   "fieldtype": "Data",
+   "label": "Access Code",
+   "length": 6,
+   "mandatory_depends_on": "require_access_code"
   },
   {
    "default": "0",

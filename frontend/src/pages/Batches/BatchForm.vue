@@ -94,6 +94,27 @@
 						<div class="space-y-4">
 							<BooleanSwitch
 								size="sm"
+								v-model="batchDetail.doc.require_access_code"
+								:label="__('Require Access Code')"
+								:description="
+									__(
+										'Batch stays visible in listings, but students must enter this code to enroll.'
+									)
+								"
+							/>
+							<FormControl
+								v-if="batchDetail.doc.require_access_code"
+								v-model="batchDetail.doc.access_code"
+								type="text"
+								maxlength="6"
+								:label="__('Access Code')"
+								:placeholder="__('6-digit code')"
+								variant="outline"
+							/>
+						</div>
+						<div class="space-y-4">
+							<BooleanSwitch
+								size="sm"
 								v-model="batchDetail.doc.paid_batch"
 								:label="__('Paid Batch')"
 								:description="__('Charge a fee for batch enrollment.')"
@@ -487,6 +508,7 @@ const updateBatchData = (): void => {
 		'published',
 		'paid_batch',
 		'allow_self_enrollment',
+		'require_access_code',
 		'certification',
 		'evaluation',
 	]

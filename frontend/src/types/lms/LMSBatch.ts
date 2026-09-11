@@ -71,6 +71,10 @@ export interface LMSBatch {
 	amount_usd?: number
 	/**	Allow Self Enrollment : Check	*/
 	allow_self_enrollment?: 0 | 1
+	/**	Require Access Code : Check	*/
+	require_access_code?: 0 | 1
+	/**	Access Code : Data	*/
+	access_code?: string
 	/**	Timezone : Data	*/
 	timezone: string
 	/**	Instructors : Table MultiSelect - Course Instructor	*/

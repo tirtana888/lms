@@ -66,9 +66,37 @@
 				>
 					{{ __('Contact the Administrator to enroll for this course') }}
 				</Badge>
+				<div
+					v-else-if="course.data?.require_access_code && !isAdmin"
+					class="space-y-2 mb-8"
+				>
+					<FormControl
+						v-model="accessCodeInput"
+						type="text"
+						maxlength="6"
+						variant="outline"
+						:placeholder="__('Enter 6-digit access code')"
+					/>
+					<Button
+						@click="enrollStudent(accessCodeInput)"
+						:loading="enrolling"
+						:disabled="accessCodeInput.length !== 6"
+						variant="solid"
+						class="w-full"
+						size="md"
+					>
+						<template #prefix>
+							<span class="lucide-key-round size-4" />
+						</template>
+						<span>
+							{{ __('Enroll with code') }}
+						</span>
+					</Button>
+				</div>
 				<Button
 					v-else-if="!isAdmin"
 					@click="enrollStudent()"
+					:loading="enrolling"
 					variant="solid"
 					class="w-full mb-8"
 					size="md"
@@ -147,8 +175,8 @@
 	</div>
 </template>
 <script setup lang="ts">
-import { computed, inject } from 'vue'
-import { Badge, Button, call, createResource, toast } from 'frappe-ui'
+import { computed, inject, ref } from 'vue'
+import { Badge, Button, FormControl, call, createResource, toast } from 'frappe-ui'
 import { useRouter } from 'vue-router'
 import CertificationLinks from '@/components/CertificationLinks.vue'
 import VideoPreview from '@/components/VideoPreview.vue'
@@ -174,7 +202,10 @@ const props = withDefaults(
 	{}
 )
 
-function enrollStudent() {
+const enrolling = ref(false)
+const accessCodeInput = ref('')
+
+function enrollStudent(code?: string) {
 	if (!user.data) {
 		toast.warning(__('You need to login first to enroll for this course'))
 		setTimeout(() => {
@@ -184,12 +215,10 @@ function enrollStudent() {
 	}
 	const courseName = props.course.data?.name
 	if (!courseName) return
-	call('frappe.client.insert', {
-		doc: {
-			doctype: 'LMS Enrollment',
-			course: courseName,
-			member: user.data.name,
-		},
+	enrolling.value = true
+	call('lms.lms.utils.enroll_in_free_course', {
+		course: courseName,
+		code,
 	})
 		.then(() => {
 			capture('enrolled_in_course', { course: courseName })
@@ -209,6 +238,9 @@ function enrollStudent() {
 			const msg = typeof err === 'string' ? err : err.messages?.[0] ?? 'Error'
 			toast.warning(__(msg))
 			console.error(err)
+		})
+		.finally(() => {
+			enrolling.value = false
 		})
 }
 

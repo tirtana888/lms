@@ -19,6 +19,7 @@ class LMSBatchEnrollment(Document):
 		self.validate_duplicate_members()
 		self.validate_payment()
 		self.validate_self_enrollment()
+		self.validate_access_code()
 		self.validate_seat_availability()
 		self.validate_course_enrollment()
 
@@ -55,6 +56,17 @@ class LMSBatchEnrollment(Document):
 			return
 		if not batch_details.allow_self_enrollment and not self.is_admin():
 			frappe.throw(_("Enrollment in this batch is restricted. Please contact the Administrator."))
+
+	def validate_access_code(self):
+		batch_details = frappe.db.get_value(
+			"LMS Batch", self.batch, ["require_access_code", "access_code"], as_dict=True
+		)
+		if not batch_details.require_access_code or self.is_admin():
+			return
+
+		entered = (self.flags.entered_access_code or "").strip()
+		if not entered or entered != (batch_details.access_code or "").strip():
+			frappe.throw(_("Invalid access code."))
 
 	def is_admin(self):
 		roles = frappe.get_roles(frappe.session.user)

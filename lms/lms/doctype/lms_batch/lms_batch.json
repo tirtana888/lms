@@ -15,6 +15,8 @@
   "end_date",
   "column_break_4",
   "allow_self_enrollment",
+  "require_access_code",
+  "access_code",
   "start_time",
   "end_time",
   "timezone",
@@ -318,6 +320,21 @@
    "fieldname": "allow_self_enrollment",
    "fieldtype": "Check",
    "label": "Allow Self Enrollment"
+  },
+  {
+   "default": "0",
+   "description": "Students see this batch in the listing as usual but must enter the code below to enroll.",
+   "fieldname": "require_access_code",
+   "fieldtype": "Check",
+   "label": "Require Access Code"
+  },
+  {
+   "depends_on": "require_access_code",
+   "fieldname": "access_code",
+   "fieldtype": "Data",
+   "label": "Access Code",
+   "length": 6,
+   "mandatory_depends_on": "require_access_code"
   },
   {
    "fieldname": "timezone",

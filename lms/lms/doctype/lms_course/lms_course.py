@@ -16,6 +16,7 @@ from ...utils import (
 	get_lesson_count,
 	get_lms_route,
 	update_payment_record,
+	validate_access_code_format,
 	validate_image,
 )
 
@@ -31,6 +32,7 @@ class LMSCourse(Document):
 		self.validate_amount_and_currency()
 		self.image = validate_image(self.image)
 		self.validate_card_gradient()
+		validate_access_code_format(self)
 
 	def validate_published(self):
 		if not self.published:

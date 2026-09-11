@@ -90,6 +90,34 @@
 						</span>
 					</Button>
 				</router-link>
+				<div
+					v-else-if="
+						batch.data.require_access_code &&
+						batch.data.seats_left &&
+						batch.data.accept_enrollments
+					"
+					class="space-y-2 mt-2"
+				>
+					<FormControl
+						v-model="accessCodeInput"
+						type="text"
+						maxlength="6"
+						variant="outline"
+						:placeholder="__('Enter 6-digit access code')"
+					/>
+					<Button
+						variant="solid"
+						class="w-full"
+						:loading="enroll.loading"
+						:disabled="accessCodeInput.length !== 6"
+						@click="enrollInBatch()"
+					>
+						<template #prefix>
+							<span class="lucide-key-round size-4" />
+						</template>
+						{{ __('Enroll with code') }}
+					</Button>
+				</div>
 				<Button
 					variant="solid"
 					class="w-full mt-2"
@@ -110,8 +138,8 @@
 	</div>
 </template>
 <script setup>
-import { inject, computed } from 'vue'
-import { Badge, Button, createResource, toast } from 'frappe-ui'
+import { inject, computed, ref } from 'vue'
+import { Badge, Button, FormControl, createResource, toast } from 'frappe-ui'
 import { formatNumberIntoCurrency, formatTime } from '@/utils'
 import { formatTimezone, nextOccurrence } from '@/utils/timezone'
 import DateRange from '@/components/Common/DateRange.vue'
@@ -127,11 +155,14 @@ const props = defineProps({
 	},
 })
 
+const accessCodeInput = ref('')
+
 const enroll = createResource({
 	url: 'lms.lms.utils.enroll_in_batch',
 	makeParams(values) {
 		return {
 			batch: props.batch.data.name,
+			code: accessCodeInput.value || undefined,
 		}
 	},
 })
