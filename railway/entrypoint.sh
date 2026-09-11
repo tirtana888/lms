@@ -44,7 +44,11 @@ if [ ! -d "sites/$SITE_NAME" ]; then
     --no-mariadb-socket \
     --install-app lms"
 else
-  echo "Site $SITE_NAME sudah ada, lewati bootstrap."
+  echo "Site $SITE_NAME sudah ada, jalankan bench migrate untuk sinkronkan schema..."
+  # new-site only runs once; every later deploy that changes a doctype (new
+  # field, new doctype) needs this to actually alter the existing tables —
+  # code changes alone never touch the database.
+  su frappe -c "bench --site '$SITE_NAME' migrate"
 fi
 
 # socketio.js (the Node realtime server) reads its Redis target from the
