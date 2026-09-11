@@ -14,9 +14,43 @@ class LMSAssignmentSubmission(Document):
 	def validate(self):
 		self.enforce_member_ownership()
 		self.enforce_grading_permission()
+		self.validate_drip_window()
 		self.validate_duplicates()
 		self.validate_url()
 		self.validate_status()
+
+	def validate_drip_window(self):
+		"""Students cannot create a submission before the assignment's drip
+		release date. Privileged roles (instructors grading, etc.) are exempt —
+		same reasoning as enforce_grading_permission just above.
+		"""
+		if PRIVILEGED_ROLES & set(frappe.get_roles()):
+			return
+		if not self.assignment:
+			return
+
+		assignment = frappe.db.get_value(
+			"LMS Assignment",
+			self.assignment,
+			["title", "course", "drip_type", "drip_date", "drip_days"],
+			as_dict=True,
+		)
+		if not assignment or not assignment.drip_type or not assignment.course:
+			return
+
+		from lms.lms.permissions import get_drip_anchor_dates
+		from lms.lms.utils import is_drip_blocked
+
+		enrollment_creation, batch_start = get_drip_anchor_dates(assignment.course, self.member)
+		if not enrollment_creation:
+			return
+		if is_drip_blocked(
+			assignment.drip_type, assignment.drip_date, assignment.drip_days, enrollment_creation, batch_start
+		):
+			frappe.throw(
+				_("{0} is not available yet.").format(frappe.bold(assignment.title)),
+				frappe.PermissionError,
+			)
 
 	def enforce_grading_permission(self):
 		"""Only evaluators/instructors may set the grading fields.

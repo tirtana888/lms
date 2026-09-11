@@ -1354,6 +1354,33 @@ def has_drip_schedule(course: str) -> bool:
 	return bool(frappe.db.exists("Course Chapter", {"course": course, "drip_type": ("!=", "")}))
 
 
+def resolve_drip_release_date(drip_type, drip_date, drip_days, enrollment_creation, batch_start_date):
+	"""The date a drip-scheduled item (chapter/quiz/assignment) actually opens,
+	or None if ``drip_type`` isn't one of the three recognised modes.
+
+	Shared by every drip call site (chapters today; quiz/assignment reuse it
+	rather than re-implementing the same three branches) so the date math
+	only exists once. enrollment_creation/batch_start_date are the same pair
+	get_drip_anchor_dates already resolves per viewer — see its docstring for
+	the batch-start-falls-back-to-enrollment reasoning.
+	"""
+	if drip_type == "On a fixed date":
+		return drip_date
+	if drip_type == "Days after enrollment":
+		return add_days(getdate(enrollment_creation), cint(drip_days))
+	if drip_type == "Days after batch start":
+		return add_days(batch_start_date or getdate(enrollment_creation), cint(drip_days))
+	return None
+
+
+def is_drip_blocked(drip_type, drip_date, drip_days, enrollment_creation, batch_start_date) -> bool:
+	"""Whether a single drip-scheduled item hasn't been released yet."""
+	if not drip_type:
+		return False
+	release = resolve_drip_release_date(drip_type, drip_date, drip_days, enrollment_creation, batch_start_date)
+	return bool(release) and getdate() < getdate(release)
+
+
 def compute_drip_locked_chapters(course: str, enrollment_creation, batch_start_date) -> set:
 	"""Chapter names in ``course`` whose drip release hasn't arrived yet.
 
@@ -1372,19 +1399,11 @@ def compute_drip_locked_chapters(course: str, enrollment_creation, batch_start_d
 	if not chapters:
 		return set()
 
-	today = getdate()
-	enrolled_on = getdate(enrollment_creation)
 	locked = set()
 	for chapter in chapters:
-		if chapter.drip_type == "On a fixed date":
-			release = chapter.drip_date
-		elif chapter.drip_type == "Days after enrollment":
-			release = add_days(enrolled_on, cint(chapter.drip_days))
-		elif chapter.drip_type == "Days after batch start":
-			release = add_days(batch_start_date or enrolled_on, cint(chapter.drip_days))
-		else:
-			continue
-		if release and today < getdate(release):
+		if is_drip_blocked(
+			chapter.drip_type, chapter.drip_date, chapter.drip_days, enrollment_creation, batch_start_date
+		):
 			locked.add(chapter.name)
 	return locked
 

@@ -23,6 +23,42 @@
 					doctype="LMS Course"
 					placeholder=" "
 				/>
+				<template v-if="assignment.course">
+					<FormControl
+						type="select"
+						:label="__('Release')"
+						v-model="assignment.drip_type"
+						:options="[
+							{ label: __('Immediately'), value: '' },
+							{ label: __('On a fixed date'), value: 'On a fixed date' },
+							{
+								label: __('Days after enrollment'),
+								value: 'Days after enrollment',
+							},
+							{
+								label: __('Days after batch start'),
+								value: 'Days after batch start',
+							},
+						]"
+					/>
+					<FormControl
+						v-if="assignment.drip_type === 'On a fixed date'"
+						type="date"
+						:label="__('Release Date')"
+						v-model="assignment.drip_date"
+						:required="true"
+					/>
+					<FormControl
+						v-if="
+							assignment.drip_type === 'Days after enrollment' ||
+							assignment.drip_type === 'Days after batch start'
+						"
+						type="number"
+						:label="__('Days')"
+						v-model="assignment.drip_days"
+						:required="true"
+					/>
+				</template>
 				<div
 					role="group"
 					:aria-labelledby="questionLabelId"
@@ -127,6 +163,9 @@ interface AssignmentFields {
 	type: string
 	question: string
 	course: string
+	drip_type: string
+	drip_date: string | null
+	drip_days: number | null
 }
 
 const assignment = reactive<AssignmentFields>({
@@ -134,6 +173,9 @@ const assignment = reactive<AssignmentFields>({
 	type: '',
 	question: '',
 	course: '',
+	drip_type: '',
+	drip_date: null,
+	drip_days: null,
 })
 
 // C4: edit mode used to copy its values out of the parent list's in-memory
@@ -169,6 +211,9 @@ watch(
 		assignment.type = doc.type
 		assignment.question = doc.question
 		assignment.course = doc.course || ''
+		assignment.drip_type = doc.drip_type || ''
+		assignment.drip_date = doc.drip_date || null
+		assignment.drip_days = doc.drip_days ?? null
 	},
 	{ immediate: true }
 )

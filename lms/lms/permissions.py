@@ -94,7 +94,9 @@ def can_access_quiz(quiz: str, *, user: str | None = None) -> bool:
 	if not isinstance(quiz, str) or not quiz:
 		return False
 
-	quiz_row = frappe.db.get_value("LMS Quiz", quiz, ["course", "lesson", "owner"], as_dict=True)
+	quiz_row = frappe.db.get_value(
+		"LMS Quiz", quiz, ["course", "lesson", "owner", "drip_type", "drip_date", "drip_days"], as_dict=True
+	)
 	if not quiz_row:
 		return False
 
@@ -129,6 +131,14 @@ def can_access_quiz(quiz: str, *, user: str | None = None) -> bool:
 				return True
 			if not get_membership(course, user):
 				continue
+			if quiz_row.drip_type:
+				from lms.lms.utils import is_drip_blocked
+
+				enrollment_creation, batch_start = get_drip_anchor_dates(course, user)
+				if not enrollment_creation or is_drip_blocked(
+					quiz_row.drip_type, quiz_row.drip_date, quiz_row.drip_days, enrollment_creation, batch_start
+				):
+					continue
 			locked = get_locked_lessons(course)
 			if not locked:
 				return True

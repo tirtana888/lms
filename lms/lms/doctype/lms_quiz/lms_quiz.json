@@ -23,6 +23,11 @@
   "column_break_clsh",
   "enable_negative_marking",
   "marks_to_cut",
+  "drip_section",
+  "drip_type",
+  "drip_date",
+  "column_break_quiz_drip",
+  "drip_days",
   "section_break_sbjx",
   "questions",
   "section_break_3",
@@ -165,6 +170,37 @@
    "fieldname": "marks_to_cut",
    "fieldtype": "Int",
    "label": "Marks To Cut"
+  },
+  {
+   "fieldname": "drip_section",
+   "fieldtype": "Section Break",
+   "label": "Drip Content"
+  },
+  {
+   "fieldname": "drip_type",
+   "fieldtype": "Select",
+   "label": "Release",
+   "options": "\nOn a fixed date\nDays after enrollment\nDays after batch start"
+  },
+  {
+   "depends_on": "eval:doc.drip_type==\"On a fixed date\"",
+   "fieldname": "drip_date",
+   "fieldtype": "Date",
+   "label": "Release Date",
+   "mandatory_depends_on": "eval:doc.drip_type==\"On a fixed date\""
+  },
+  {
+   "fieldname": "column_break_quiz_drip",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.drip_type==\"Days after enrollment\"||doc.drip_type==\"Days after batch start\"",
+   "description": "For a student with no batch (\"Days after batch start\" with no batch on their enrollment), this falls back to their own enrollment date.",
+   "fieldname": "drip_days",
+   "fieldtype": "Int",
+   "label": "Days",
+   "mandatory_depends_on": "eval:doc.drip_type==\"Days after enrollment\"||doc.drip_type==\"Days after batch start\"",
+   "non_negative": 1
   }
  ],
  "grid_page_length": 50,

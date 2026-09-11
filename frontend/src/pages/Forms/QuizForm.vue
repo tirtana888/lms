@@ -305,6 +305,40 @@
 						:label="__('Marks to Deduct')"
 						variant="outline"
 					/>
+					<FormControl
+						type="select"
+						:label="__('Release')"
+						v-model="doc.drip_type"
+						variant="outline"
+						:options="[
+							{ label: __('Immediately'), value: '' },
+							{ label: __('On a fixed date'), value: 'On a fixed date' },
+							{ label: __('Days after enrollment'), value: 'Days after enrollment' },
+							{
+								label: __('Days after batch start'),
+								value: 'Days after batch start',
+							},
+						]"
+					/>
+					<FormControl
+						v-if="doc.drip_type === 'On a fixed date'"
+						type="date"
+						:label="__('Release Date')"
+						v-model="doc.drip_date"
+						variant="outline"
+						:required="true"
+					/>
+					<FormControl
+						v-if="
+							doc.drip_type === 'Days after enrollment' ||
+							doc.drip_type === 'Days after batch start'
+						"
+						type="number"
+						:label="__('Days')"
+						variant="outline"
+						v-model="doc.drip_days"
+						:required="true"
+					/>
 					<BooleanSwitch
 						v-model="doc.enable_proctoring"
 						size="sm"
