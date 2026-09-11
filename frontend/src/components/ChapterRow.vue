@@ -50,7 +50,7 @@
 				</span>
 				<Tooltip :text="__('Edit Chapter')" placement="bottom">
 					<span
-						v-if="allowEdit && chapter.is_scorm_package"
+						v-if="allowEdit"
 						@click.prevent="emit('edit-chapter', chapter)"
 						class="lucide-file-pen-line size-4 text-ink-gray-9 invisible group-hover:visible"
 					/>
