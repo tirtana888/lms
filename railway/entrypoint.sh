@@ -20,7 +20,7 @@ if [ ! -f sites/apps.txt ]; then
   su frappe -c "printf 'frappe\npayments\nlms\n' > sites/apps.txt"
 fi
 if [ ! -f sites/common_site_config.json ]; then
-  su frappe -c "echo '{}' > sites/common_site_config.json"
+  su frappe -c "echo '{\"socketio_port\": 9000}' > sites/common_site_config.json"
 fi
 
 if [ ! -d "sites/$SITE_NAME" ]; then

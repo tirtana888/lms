@@ -21,7 +21,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # problem entirely.
 USER frappe
 WORKDIR /home/frappe/frappe-bench
-RUN bench get-app https://github.com/tirtana888/lms --branch v2.63.0 --skip-assets \
+# lms/frontend/src/socket.js statically imports the `socketio_port` key out
+# of common_site_config.json (Vite treats JSON keys as named ES exports), so
+# a missing key is a build-time Rollup error, not just an empty runtime
+# value — the base image's config is still the bare "{}" bench init wrote.
+RUN echo '{"socketio_port": 9000}' > sites/common_site_config.json \
+    && bench get-app https://github.com/tirtana888/lms --branch v2.63.0 --skip-assets \
     && ln -sfn /home/frappe/frappe-bench/apps/frappe/ui \
          apps/lms/frontend/node_modules/@framework/ui \
     && bench build --app lms
