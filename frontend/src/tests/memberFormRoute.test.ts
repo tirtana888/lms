@@ -108,7 +108,7 @@ createResourceMock.mockImplementation(() => lookup)
 const moderator = { name: 'mod@example.com', is_moderator: true }
 const outsider = { name: 'someone@example.com' }
 
-const FormRoute = { path: '/settings/users/:memberID', component: MemberForm }
+const FormRoute = { path: '/users/:memberID', component: MemberForm }
 
 const makeRouter = (): Router =>
 	createRouter({
@@ -116,9 +116,9 @@ const makeRouter = (): Router =>
 		routes: [
 			{ path: '/', name: 'Home', component: { template: '<div>HOME</div>' } },
 			{
-				path: '/you',
-				name: 'MobileYou',
-				component: { template: '<div>YOU</div>' },
+				path: '/users',
+				name: 'Members',
+				component: { template: '<div>MEMBERS</div>' },
 			},
 			{ ...FormRoute, name: 'MemberForm', props: true },
 		],
@@ -168,20 +168,21 @@ describe('the member form route', () => {
 	// resolve(), not push(): matching is synchronous and does not pull in the
 	// lazy page components, several of which are expensive to transform.
 	describe('route grammar', () => {
-		it('resolves both modes of /settings/users/:memberID', () => {
+		it('resolves both modes of /users/:memberID', () => {
 			const router = createRouter({ history: createMemoryHistory(), routes })
 
-			const add = router.resolve('/settings/users/new')
+			const add = router.resolve('/users/new')
 			expect(add.name).toBe('MemberForm')
 			expect(add.params.memberID).toBe('new')
 
-			const edit = router.resolve(`/settings/users/${MEMBER}`)
+			const edit = router.resolve(`/users/${MEMBER}`)
 			expect(edit.name).toBe('MemberForm')
 			expect(edit.params.memberID).toBe(MEMBER)
 		})
 
-		// It is the only thing under '/settings' with an address now: the phone
-		// settings pages are gone, so the prefix itself matches nothing.
+		// User management moved off '/settings' entirely onto '/users', so the
+		// prefix now matches nothing at all rather than just the phone settings
+		// pages that used to live under it.
 		it('is the only route under the settings prefix', () => {
 			const router = createRouter({ history: createMemoryHistory(), routes })
 			expect(router.resolve('/settings').name).toBe('NotFound')
@@ -197,8 +198,17 @@ describe('the member form route', () => {
 		})
 
 		it('points that route at the member form itself', async () => {
-			type LazyRecord = { name?: unknown; component?: () => Promise<unknown> }
-			const record = (routes as LazyRecord[]).find(
+			type LazyRecord = {
+				name?: unknown
+				component?: () => Promise<unknown>
+				children?: LazyRecord[]
+			}
+			// MemberForm now nests under Members (the '/users' list page) rather
+			// than sitting at the top level, mirroring Batches/NewBatch.
+			const membersRoute = (routes as LazyRecord[]).find(
+				(route) => route.name === 'Members'
+			)
+			const record = membersRoute?.children?.find(
 				(route) => route.name === 'MemberForm'
 			)
 			expect(record?.component).toBeTypeOf('function')
@@ -208,12 +218,12 @@ describe('the member form route', () => {
 		})
 	})
 
-	// Members.vue's Add button carried no gate of its own; the gate was on the
-	// settings surface around it, and a URL goes through neither.
+	// Members.vue's Add button carries no gate of its own, and a URL goes
+	// through no button at all, so the gate has to live in this route itself.
 	describe('the permission gate', () => {
 		it('refuses a non-moderator', async () => {
 			const router = makeRouter()
-			await router.push('/settings/users/new')
+			await router.push('/users/new')
 			const wrapper = await mountForm(router, outsider)
 
 			expect(fields(wrapper).exists()).toBe(false)
@@ -225,7 +235,7 @@ describe('the member form route', () => {
 
 		it('refuses a signed-out visitor', async () => {
 			const router = makeRouter()
-			await router.push('/settings/users/new')
+			await router.push('/users/new')
 			const wrapper = await mountForm(router, null)
 
 			expect(fields(wrapper).exists()).toBe(false)
@@ -234,7 +244,7 @@ describe('the member form route', () => {
 
 		it('shows the fields to a moderator', async () => {
 			const router = makeRouter()
-			await router.push('/settings/users/new')
+			await router.push('/users/new')
 			const wrapper = await mountForm(router)
 
 			expect(fields(wrapper).exists()).toBe(true)
@@ -244,20 +254,20 @@ describe('the member form route', () => {
 		// A refused page must not go on to ask the server for the row either.
 		it('does not fetch the member it refuses to show', async () => {
 			const router = makeRouter()
-			await router.push(`/settings/users/${MEMBER}`)
+			await router.push(`/users/${MEMBER}`)
 			await mountForm(router, outsider)
 
 			expect(lookup.fetch).not.toHaveBeenCalled()
 		})
 	})
 
-	// Cold deep link: nothing opened this form, so no settings surface is
-	// mounted, there is no in-memory member row handed over from a click, and
-	// there is no history entry of ours to pop.
+	// Cold deep link: nothing opened this form, so the Members list is not
+	// mounted underneath it, there is no in-memory member row handed over from
+	// a click, and there is no history entry of ours to pop.
 	describe('a cold deep link', () => {
-		it('stands the add form up with no settings page mounted', async () => {
+		it('stands the add form up with no list page mounted', async () => {
 			const router = makeRouter()
-			await router.push('/settings/users/new')
+			await router.push('/users/new')
 			const wrapper = await mountForm(router)
 
 			expect(fields(wrapper).exists()).toBe(true)
@@ -266,22 +276,23 @@ describe('the member form route', () => {
 			expect(wrapper.text()).toContain('Add New Member')
 		})
 
-		it('closes onto the account page it can reach by URL', async () => {
-			// The You page: settings has no address at all now, and this is the
-			// nearest surviving surface a phone can be dropped on.
+		it('closes onto the users list it can reach by URL', async () => {
+			// Members is this route's own parent now, and a real page with an
+			// address of its own — the natural place to land with nothing else
+			// to pop back to.
 			const router = makeRouter()
-			await router.push('/settings/users/new')
+			await router.push('/users/new')
 			const wrapper = await mountForm(router)
 
 			wrapper.findComponent({ name: 'Dialog' }).vm.$emit('update:open', false)
 			await flushPromises()
 
-			expect(router.currentRoute.value.name).toBe('MobileYou')
+			expect(router.currentRoute.value.name).toBe('Members')
 		})
 
 		it('fetches the edit form its own row and seeds the switches', async () => {
 			const router = makeRouter()
-			await router.push(`/settings/users/${MEMBER}`)
+			await router.push(`/users/${MEMBER}`)
 			const wrapper = await mountForm(router)
 
 			expect(lookup.fetch).toHaveBeenCalled()
@@ -328,9 +339,9 @@ describe('the member form route', () => {
 		// key: Members.vue's resource closes over component-local refs, and
 		// frappe-ui hands back the first instance for a cache key without
 		// rebinding them, so a remounted panel would render empty forever.
-		it('announces the change even with no settings surface mounted', async () => {
+		it('announces the change even with no list page mounted', async () => {
 			const router = makeRouter()
-			await router.push('/settings/users/new')
+			await router.push('/users/new')
 			const wrapper = await mountForm(router)
 			callMock.mockResolvedValue({ name: MEMBER })
 
@@ -355,13 +366,13 @@ describe('the member form route', () => {
 				value: 1,
 			})
 			expect(toastMock.success).toHaveBeenCalled()
-			expect(router.currentRoute.value.name).toBe('MobileYou')
+			expect(router.currentRoute.value.name).toBe('Members')
 		})
 
 		it('bumps the signal a mounted list watches', async () => {
 			const before = membersRevision.value
 			const router = makeRouter()
-			await router.push('/settings/users/new')
+			await router.push('/users/new')
 			const wrapper = await mountForm(router)
 			callMock.mockResolvedValue({ name: MEMBER })
 
@@ -376,7 +387,7 @@ describe('the member form route', () => {
 		// and kept writing into the dead component's refs.
 		it('never reaches for the list resource by cache key', async () => {
 			const router = makeRouter()
-			await router.push('/settings/users/new')
+			await router.push('/users/new')
 			const wrapper = await mountForm(router)
 			callMock.mockResolvedValue({ name: MEMBER })
 
@@ -388,9 +399,9 @@ describe('the member form route', () => {
 		})
 	})
 
-	// Opened from Members.vue instead. On desktop the settings dialog is still
-	// floating above whatever page the URL points at, so closing has to pop back
-	// to that page rather than replace it with the phone settings screen.
+	// Opened from Members.vue (or anywhere else via openFormRoute) rather than
+	// arriving cold: closing has to pop back to whatever page was already open
+	// underneath it, not replace it with Members.
 	it('pops back to where it was opened from', async () => {
 		const router = makeRouter()
 		await router.push('/')
@@ -409,7 +420,7 @@ describe('the member form route', () => {
 	// Edit mode only writes the roles that changed, exactly as the modal did.
 	it('saves only the roles the edit actually toggled', async () => {
 		const router = makeRouter()
-		await router.push(`/settings/users/${MEMBER}`)
+		await router.push(`/users/${MEMBER}`)
 		const wrapper = await mountForm(router)
 
 		lookup.data = { name: MEMBER, roles: ['LMS Student'] }

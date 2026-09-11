@@ -1,5 +1,4 @@
 import { markRaw } from 'vue'
-import Members from '@/components/Settings/Members.vue'
 import Categories from '@/components/Settings/Categories.vue'
 import EmailTemplatePage from '@/components/Settings/EmailTemplate/EmailTemplatePage.vue'
 import EmailConfig from '@/components/Settings/EmailAccount/EmailConfig.vue'
@@ -290,19 +289,6 @@ export const settingsStructure = [
 					'Manage the email templates for your learning system',
 				icon: 'lucide-mail-plus',
 				template: markRaw(EmailTemplatePage),
-			},
-		],
-	},
-	{
-		label: 'User Management',
-		hideLabel: false,
-		items: [
-			{
-				label: 'Users',
-				description:
-					'Manage users by adding or inviting them, and assign roles to control their access and permissions',
-				icon: 'lucide-user',
-				template: markRaw(Members),
 			},
 		],
 	},

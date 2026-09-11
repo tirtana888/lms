@@ -292,14 +292,10 @@ const { updateOnboardingStep } = useOnboarding('learning')
 const isEdit = computed(() => props.memberID !== 'new')
 
 // Only reached on a deep link or a reload — opened from Members.vue this pops
-// back to whatever page the settings dialog was floating over (useFormRoute.ts).
-// Settings itself is that dialog and has no address, so a URL that arrives here
-// cold has nothing settings-shaped to be sent back to.
-//
-// The You page, then: it is the phone's account surface, it is a real route on
-// every viewport, and it is the nearest thing left to the page this form used
-// to close onto. Home would work too and says less.
-const { close } = useFormRoute({ name: 'MobileYou' })
+// back to whatever page it was opened from (useFormRoute.ts). Members is now a
+// real top-level page (this route's own parent), so it is the natural fallback
+// rather than a phone-only surface with no real connection to user management.
+const { close } = useFormRoute({ name: 'Members' })
 
 // Members.vue's Add button carried no gate of its own — the gate was on the
 // settings surface around it (UserDropdown.vue:59-62 for the desktop dialog),

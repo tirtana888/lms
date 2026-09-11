@@ -565,6 +565,19 @@ const getSidebarItems = (forMobile = false) => {
 					},
 				},
 				{
+					label: 'Users',
+					icon: 'UserCog',
+					to: 'Members',
+					activeFor: ['Members', 'MemberForm'],
+					// Matches the `frappe.only_for(["Moderator"])` gate on
+					// get_members/get_member/get_member_overview in lms/lms/api.py —
+					// Members.vue and MemberForm.vue both refuse a non-moderator who
+					// reaches them directly by URL, so this only hides the entry point.
+					condition: () => {
+						return !forMobile && userResource?.data?.is_moderator
+					},
+				},
+				{
 					label: 'Jobs',
 					icon: 'Briefcase',
 					to: 'Jobs',

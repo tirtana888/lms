@@ -1,8 +1,8 @@
 /**
- * Settings > Users pages through lms.lms.api.get_members rather than a list
- * resource, so its search and paging correctness is its own: the term has to
- * reach the server, the offset has to go back to zero, and a response has to be
- * dropped once the query it was issued for is gone.
+ * The Users page (pages/Members.vue) goes through lms.lms.api.get_members
+ * rather than a list resource, so its search and paging correctness is its
+ * own: the term has to reach the server, the offset has to go back to zero,
+ * and a response has to be dropped once the query it was issued for is gone.
  *
  * The mock resolves reload() from a queue the test controls, so two requests
  * can be held open at once and landed in either order.
@@ -29,8 +29,13 @@ vi.mock('frappe-ui', () => ({
 		submit: vi.fn(),
 	}),
 	toast: { success: vi.fn(), error: vi.fn() },
+	usePageMeta: vi.fn(),
 	Dialog: { template: '<div />' },
 	Select: { template: '<select />' },
+	Avatar: { template: '<div />' },
+	Badge: { template: '<div><slot /></div>' },
+	Button: { template: '<button><slot /></button>' },
+	Dropdown: { template: '<div><slot /></div>' },
 }))
 
 vi.mock('frappe-ui/frappe', () => ({
@@ -40,15 +45,19 @@ vi.mock('frappe-ui/frappe', () => ({
 
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
 
+vi.mock('@/stores/session', () => ({ sessionStore: () => ({ brand: {} }) }))
+
 vi.mock('@/utils', () => ({
 	cleanError: (e: unknown) => e,
-	openSettings: vi.fn(),
 }))
 
 vi.stubGlobal('__', (text: string) => text)
 
-import Members from '@/components/Settings/Members.vue'
-import { SETTINGS_PAGE_LENGTH } from '@/composables/useSettingsListResource'
+import Members from '@/pages/Members.vue'
+
+// Matches MEMBERS_PAGE_LENGTH in lms/lms/api.py (and the same-named constant
+// in Members.vue), which pages `start` by this.
+const MEMBERS_PAGE_LENGTH = 13
 
 const rows = (count: number, prefix = 'user') =>
 	Array.from({ length: count }, (_, i) => ({ name: `${prefix}${i}@x.com` }))
@@ -61,14 +70,16 @@ const land = async (data: any[]) => {
 
 const mountMembers = () =>
 	shallowMount(Members, {
-		props: { label: 'Users', description: '' },
 		global: {
-			provide: { $user: { data: { is_system_manager: true } } },
+			// The page now gates itself on mount (a real route needs its own
+			// refusal, unlike the old settings-dialog panel no URL could reach) —
+			// without is_moderator here every fetch below would be skipped.
+			provide: { $user: { data: { is_moderator: true } } },
 			mocks: { __: (text: string) => text },
 		},
 	})
 
-describe('Settings > Users search', () => {
+describe('Users page search', () => {
 	beforeEach(() => {
 		paramsSeen.length = 0
 		pending.length = 0
@@ -91,8 +102,8 @@ describe('Settings > Users search', () => {
 
 	it('restarts at the first page when searching after Load More', async () => {
 		const vm = mountMembers().vm as any
-		await land(rows(SETTINGS_PAGE_LENGTH))
-		expect(vm.start).toBe(SETTINGS_PAGE_LENGTH)
+		await land(rows(MEMBERS_PAGE_LENGTH))
+		expect(vm.start).toBe(MEMBERS_PAGE_LENGTH)
 
 		vm.search = 'ada'
 		await flushPromises()
@@ -111,24 +122,16 @@ describe('Settings > Users search', () => {
 		expect(vm.memberList).toEqual([])
 	})
 
-	// The header and every row are separate grid containers sharing one grid
-	// template, so a content-sized track resolves independently in each. This
-	// column carried `width: 'auto'` and put the Roles header ~300px right of
-	// the badges it labelled.
-	it('sizes every column identically in the header and the rows', () => {
-		const columns = mountMembers()
-			.findComponent({ name: 'SettingsList' })
-			.props('columns') as { width?: string }[]
-
-		for (const column of columns) {
-			expect(column.width ?? '').not.toMatch(/auto|max-content|min-content/)
-		}
-	})
+	// The SettingsList-specific column-width regression this used to guard
+	// against (a `width: 'auto'` header drifting from its row in a shared CSS
+	// grid) does not apply here: ListPage's columns take numeric widths and
+	// render through ResponsiveListView, a different mechanism, already
+	// exercised by other ListPage-based pages' own tests.
 
 	it('offers Load More only on a full page', async () => {
 		const vm = mountMembers().vm as any
 
-		await land(rows(SETTINGS_PAGE_LENGTH - 1))
+		await land(rows(MEMBERS_PAGE_LENGTH - 1))
 
 		expect(vm.hasNextPage).toBe(false)
 	})
@@ -139,7 +142,7 @@ describe('Settings > Users search', () => {
 	it('keeps Load More when the server pages larger than the constant', async () => {
 		const vm = mountMembers().vm as any
 
-		await land(rows(SETTINGS_PAGE_LENGTH + 7))
+		await land(rows(MEMBERS_PAGE_LENGTH + 7))
 
 		expect(vm.hasNextPage).toBe(true)
 	})
@@ -147,20 +150,20 @@ describe('Settings > Users search', () => {
 	it('pages by the rows returned, not by the constant', async () => {
 		const vm = mountMembers().vm as any
 
-		await land(rows(SETTINGS_PAGE_LENGTH + 7))
+		await land(rows(MEMBERS_PAGE_LENGTH + 7))
 
-		expect(vm.start).toBe(SETTINGS_PAGE_LENGTH + 7)
+		expect(vm.start).toBe(MEMBERS_PAGE_LENGTH + 7)
 	})
 
 	it('appends the next page onto the rows already shown', async () => {
 		const vm = mountMembers().vm as any
-		await land(rows(SETTINGS_PAGE_LENGTH, 'first'))
+		await land(rows(MEMBERS_PAGE_LENGTH, 'first'))
 
 		vm.fetchMembers()
 		await land(rows(4, 'second'))
 
-		expect(vm.memberList).toHaveLength(SETTINGS_PAGE_LENGTH + 4)
-		expect(vm.start).toBe(SETTINGS_PAGE_LENGTH + 4)
+		expect(vm.memberList).toHaveLength(MEMBERS_PAGE_LENGTH + 4)
+		expect(vm.start).toBe(MEMBERS_PAGE_LENGTH + 4)
 	})
 
 	// createResource aborts nothing and carries no sequence number, so both
@@ -177,7 +180,7 @@ describe('Settings > Users search', () => {
 		await flushPromises()
 
 		// The Moderator page lands after the Instructor query was issued.
-		await land(rows(SETTINGS_PAGE_LENGTH, 'moderator'))
+		await land(rows(MEMBERS_PAGE_LENGTH, 'moderator'))
 		await land(rows(2, 'instructor'))
 
 		expect(vm.memberList).toHaveLength(2)

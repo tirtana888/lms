@@ -1,21 +1,26 @@
 <template>
-	<SettingsList
-		:title="__(label)"
-		:description="__(description)"
+	<ListPage
+		:breadcrumbs="breadcrumbs"
+		:title="__('Users')"
+		layout="list"
 		:columns="columns"
 		:rows="memberList"
 		:loading="Boolean(members.loading)"
 		:has-next-page="hasNextPage"
 		v-model:search="search"
-		searchable
-		:search-label="__('Search members')"
 		empty-name="Users"
 		empty-icon="lucide-user"
-		@new="openNewMember"
 		@load-more="fetchMembers()"
-		@row-click="(member) => openProfile(member.username)"
 	>
-		<template #header-bottom>
+		<template #actions>
+			<Button variant="solid" :label="__('New')" @click="openNewMember">
+				<template #prefix>
+					<span class="lucide-plus size-4" aria-hidden="true" />
+				</template>
+			</Button>
+		</template>
+
+		<template #filters>
 			<Select
 				v-model="currentRole"
 				class="w-40"
@@ -23,7 +28,40 @@
 				:options="roleOptions"
 			/>
 		</template>
-	</SettingsList>
+
+		<template #cell="{ column, row, value }">
+			<div v-if="column.key === 'full_name'" class="flex items-center gap-x-3">
+				<Avatar size="sm" :image="row.user_image" :label="row.full_name" />
+				<div class="flex min-w-0 flex-col">
+					<span class="truncate">{{ row.full_name }}</span>
+					<span class="truncate text-p-xs text-ink-gray-5">{{ row.name }}</span>
+				</div>
+			</div>
+			<div v-else-if="column.key === 'roles'" class="flex flex-wrap gap-1">
+				<Badge
+					v-for="role in displayRoles(row)"
+					:key="role"
+					theme="gray"
+					variant="subtle"
+				>
+					{{ role }}
+				</Badge>
+			</div>
+			<Dropdown
+				v-else-if="column.key === 'actions'"
+				:options="getActionOptions(row)"
+			>
+				<Button variant="ghost" :aria-label="__('Actions for {0}').format(row.full_name)">
+					<template #icon>
+						<span class="lucide-more-horizontal size-4" aria-hidden="true" />
+					</template>
+				</Button>
+			</Dropdown>
+			<div v-else>{{ value }}</div>
+		</template>
+	</ListPage>
+
+	<router-view />
 
 	<Dialog
 		v-model:open="showDeleteDialog"
@@ -51,14 +89,24 @@
 	/>
 </template>
 <script setup lang="ts">
-import { call, createResource, Dialog, Select, toast } from 'frappe-ui'
+import {
+	Avatar,
+	Badge,
+	Button,
+	call,
+	createResource,
+	Dialog,
+	Dropdown,
+	Select,
+	toast,
+	usePageMeta,
+} from 'frappe-ui'
+import { inject, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ref, watch } from 'vue'
-import type { SettingsListColumn } from '@/types'
-import { SETTINGS_PAGE_LENGTH } from '@/composables/useSettingsListResource'
+import type { Breadcrumb, ListColumn, SessionUser } from '@/types'
+import { sessionStore } from '@/stores/session'
 import { openFormRoute } from '@/composables/useFormRoute'
 import { membersRevision } from '@/stores/members'
-import SettingsList from '@/components/Layouts/SettingsList.vue'
 import { cleanError } from '@/utils'
 
 type Member = {
@@ -69,8 +117,12 @@ type Member = {
 	user_image?: string
 }
 
+// Matches MEMBERS_PAGE_LENGTH in lms/lms/api.py, which pages `start` by this.
+const MEMBERS_PAGE_LENGTH = 13
+
 const router = useRouter()
-const show = defineModel('show')
+const user = inject('$user') as SessionUser
+const { brand } = sessionStore()
 const search = ref('')
 const currentRole = ref('All')
 const start = ref(0)
@@ -83,28 +135,26 @@ const roleOptions = [
 	{ label: __('Evaluator'), value: 'Batch Evaluator' },
 ]
 
+const roleLabels: Record<string, string> = {
+	'LMS Student': __('Student'),
+	'Course Creator': __('Instructor'),
+	Moderator: __('Moderator'),
+	'Batch Evaluator': __('Evaluator'),
+}
+
+const displayRoles = (row: Member): string[] =>
+	(row.roles || []).filter((role) => roleLabels[role]).map((role) => roleLabels[role])
+
 const memberList = ref<Member[]>([])
 const hasNextPage = ref(false)
 
 const showDeleteDialog = ref(false)
 const memberToDelete = ref<Member | null>(null)
 
-defineProps({
-	label: {
-		type: String,
-		required: true,
-	},
-	description: {
-		type: String,
-		default: '',
-	},
-})
-
 // No frappe-ui `cache` key on purpose: makeParams closes over this component's
 // refs, and createResource hands back the FIRST instance for a key without
-// rebinding those closures, so a remounted panel would inherit a resource still
-// writing into the unmounted one's state. The member forms announce saves
-// through `membersRevision` instead (see stores/members.ts).
+// rebinding those closures — see the analogous note this replaced in
+// components/Settings/Members.vue.
 const members = createResource({
 	url: 'lms.lms.api.get_members',
 	makeParams: () => ({
@@ -130,7 +180,7 @@ const fetchMembers = async () => {
 	// exact-equality check hides Load More outright the moment the two
 	// disagree, and stepping `start` by the constant would then skip rows.
 	start.value = start.value + data.length
-	hasNextPage.value = data.length >= SETTINGS_PAGE_LENGTH
+	hasNextPage.value = data.length >= MEMBERS_PAGE_LENGTH
 }
 
 // The search goes to the server with start reset, so a match past the first
@@ -145,36 +195,31 @@ watch([search, currentRole], () => {
 	refreshMembers()
 })
 
-// A member form saved while this panel is still mounted behind it (the desktop
-// dialog) has no other way to reach the list. On a phone the panel unmounts, so
-// the fresh mount's own first fetch already covers it.
+// A member form saved while this page is still mounted behind it (desktop:
+// the form renders as a dialog stacked on top of this route) has no other way
+// to reach the list.
 watch(membersRevision, () => {
 	refreshMembers()
 })
 
-refreshMembers()
+// The sidebar item is already hidden from a non-moderator, but the route
+// itself has a real address now (unlike the old settings-dialog panel, which
+// no URL could reach on its own) — so a typed-in link needs the same refusal
+// MemberForm.vue's own deep link already handles, not a get_members call a
+// non-moderator was never going to see the results of. Mirrors QuizSubmissions.vue's
+// admin gate.
+onMounted(() => {
+	if (!user.data?.is_moderator) {
+		router.push({ name: 'Home' })
+		return
+	}
+	refreshMembers()
+})
 
-const roleLabels: Record<string, string> = {
-	'LMS Student': __('Student'),
-	'Course Creator': __('Instructor'),
-	Moderator: __('Moderator'),
-	'Batch Evaluator': __('Evaluator'),
+const openProfile = (member: Member) => {
+	router.push({ name: 'Profile', params: { username: member.username } })
 }
 
-const openProfile = (username: string) => {
-	show.value = false
-	router.push({
-		name: 'Profile',
-		params: {
-			username: username,
-		},
-	})
-}
-
-// The settings dialog is deliberately left open behind these: opening a member
-// form is not a "leave settings" action the way openProfile() is, and the form
-// renders as a second dialog on top, the way the delete confirmation below
-// already stacks.
 const openEditMember = (member: Member) => {
 	openFormRoute(router, {
 		name: 'MemberForm',
@@ -191,39 +236,22 @@ const openDeleteDialog = (member: Member) => {
 	showDeleteDialog.value = true
 }
 
-const columns: SettingsListColumn[] = [
+const getActionOptions = (row: Member) => [
 	{
-		key: 'member',
-		label: __('User'),
-		type: 'stacked',
-		primary: (row) => row.full_name,
-		secondary: (row) => row.name,
-		avatar: (row) => ({ image: row.user_image, label: row.full_name }),
+		label: __('View profile'),
+		icon: 'lucide-user',
+		onClick: () => openProfile(row),
 	},
 	{
-		key: 'roles',
-		label: __('Roles'),
-		type: 'badge',
-		badges: (row) =>
-			((row.roles || []) as string[])
-				.filter((role) => roleLabels[role])
-				.map((role) => ({ label: roleLabels[role], theme: 'gray' as const })),
+		label: __('Edit member'),
+		icon: 'lucide-pencil',
+		onClick: () => openEditMember(row),
 	},
 	{
-		key: 'actions',
-		type: 'actions',
-		ariaLabel: (row) => __('Actions for {0}').format(row.full_name),
-		options: (row) => [
-			{
-				label: __('Edit member'),
-				onClick: () => openEditMember(row as Member),
-			},
-			{
-				label: __('Delete user'),
-				theme: 'red',
-				onClick: () => openDeleteDialog(row as Member),
-			},
-		],
+		label: __('Delete user'),
+		icon: 'lucide-trash-2',
+		theme: 'red',
+		onClick: () => openDeleteDialog(row),
 	},
 ]
 
@@ -240,4 +268,17 @@ const confirmDelete = async (close: () => void) => {
 	}
 	close?.()
 }
+
+const columns: ListColumn[] = [
+	{ label: __('User'), key: 'full_name', width: 2.5, icon: 'lucide-user' },
+	{ label: __('Roles'), key: 'roles', width: 2 },
+	{ label: '', key: 'actions', width: 0.5, kind: 'actions' },
+]
+
+const breadcrumbs: Breadcrumb[] = [{ label: __('Users'), route: { name: 'Members' } }]
+
+usePageMeta(() => ({
+	title: __('Users'),
+	icon: brand.favicon,
+}))
 </script>

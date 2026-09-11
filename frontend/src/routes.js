@@ -411,19 +411,22 @@ export const routes = [
 		name: 'MobileYou',
 		component: () => import('@/pages/MobileYou.vue'),
 	},
-	// The only thing under '/settings' with an address. Settings itself is the
-	// desktop dialog, which floats over whatever page the URL points at and has
-	// no route of its own — an LMS is not configured with a thumb, so there are
-	// no phone settings pages for this to sit beside any more.
-	//
-	// The path is kept because it reads correctly and Members.vue opens the form
-	// by NAME, not by path, so nothing depends on the prefix resolving;
-	// '/settings' and '/settings/:item' now fall through to NotFound.
+	// User management now has a real address, alongside Batches/Courses rather
+	// than buried in the Settings dialog — Settings itself keeps floating over
+	// whatever page the URL points at for everything else, so
+	// '/settings' and '/settings/:item' still fall through to NotFound.
 	{
-		path: '/settings/users/:memberID',
-		name: 'MemberForm',
-		component: () => import('@/pages/Forms/MemberForm.vue'),
-		props: true,
+		path: '/users',
+		name: 'Members',
+		component: () => import('@/pages/Members.vue'),
+		children: [
+			{
+				path: ':memberID',
+				name: 'MemberForm',
+				component: () => import('@/pages/Forms/MemberForm.vue'),
+				props: true,
+			},
+		],
 	},
 	{
 		path: '/:pathMatch(.*)*',
