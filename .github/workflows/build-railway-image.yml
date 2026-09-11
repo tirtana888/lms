@@ -46,7 +46,7 @@ jobs:
           tags: ghcr.io/${{ github.repository_owner }}/lms-bench:latest
           build-args: |
             FRAPPE_PATH=https://github.com/frappe/frappe
-            FRAPPE_BRANCH=version-15
+            FRAPPE_BRANCH=version-15-hotfix
             PYTHON_VERSION=3.11.6
             NODE_VERSION=24
           secret-files: |
