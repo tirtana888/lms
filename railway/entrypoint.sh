@@ -8,6 +8,18 @@ if [ -z "$SITE_NAME" ]; then
   exit 1
 fi
 
+# The Railway volume mounts as an empty dir over sites/, hiding what `bench
+# get-app` wrote there at image-build time (apps.txt, common_site_config.json).
+# Re-seed them on first boot before any bench command runs.
+mkdir -p sites
+if [ ! -f sites/apps.txt ]; then
+  echo "sites/apps.txt hilang (volume kosong), membuat ulang..."
+  printf 'frappe\npayments\nlms\n' > sites/apps.txt
+fi
+if [ ! -f sites/common_site_config.json ]; then
+  echo '{}' > sites/common_site_config.json
+fi
+
 if [ ! -d "sites/$SITE_NAME" ]; then
   echo "Site $SITE_NAME belum ada, membuat baru..."
   bench new-site "$SITE_NAME" \
