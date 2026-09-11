@@ -1,14 +1,29 @@
 <template>
-	<iframe
-		v-if="frameSrc"
-		:src="frameSrc"
-		:title="__('SCORM content')"
-		class="w-full h-[600px] mb-4 border rounded-md"
-	/>
+	<div v-if="frameSrc" ref="containerRef" class="scorm-block-container relative mb-4">
+		<Button
+			variant="subtle"
+			size="sm"
+			:label="__('Toggle fullscreen')"
+			class="absolute top-2 end-2 z-10"
+			@click="toggleFullscreen"
+		>
+			<template #icon>
+				<Minimize2 v-if="isFullscreen" :size="16" :stroke-width="1.5" />
+				<Maximize2 v-else :size="16" :stroke-width="1.5" />
+			</template>
+		</Button>
+		<iframe
+			:src="frameSrc"
+			:title="__('SCORM content')"
+			class="w-full h-[75vh] border rounded-md"
+			:class="{ 'h-screen rounded-none border-0': isFullscreen }"
+		/>
+	</div>
 </template>
 <script setup>
-import { call } from 'frappe-ui'
-import { computed, onBeforeMount, ref } from 'vue'
+import { Button, call } from 'frappe-ui'
+import { Maximize2, Minimize2 } from 'lucide-vue-next'
+import { computed, onBeforeMount, onBeforeUnmount, ref } from 'vue'
 import { safeUrl } from '@/utils/safeUrl'
 
 // Mirrors the SCORM API bridge in pages/SCORMChapter.vue, scoped to a single
@@ -42,9 +57,29 @@ const frameSrc = computed(() => safeUrl(props.launchFile))
 const isSuccessfullyCompleted = ref(false)
 const progressData = ref({ status: null, scorm_content: '' })
 
+const containerRef = ref(null)
+const isFullscreen = ref(false)
+
+const toggleFullscreen = () => {
+	if (document.fullscreenElement) {
+		document.exitFullscreen()
+	} else {
+		containerRef.value?.requestFullscreen()
+	}
+}
+
+const onFullscreenChange = () => {
+	isFullscreen.value = document.fullscreenElement === containerRef.value
+}
+
 onBeforeMount(() => {
 	setupSCORMAPI()
 	loadProgress()
+	document.addEventListener('fullscreenchange', onFullscreenChange)
+})
+
+onBeforeUnmount(() => {
+	document.removeEventListener('fullscreenchange', onFullscreenChange)
 })
 
 const loadProgress = () => {
