@@ -10,6 +10,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
          /var/lib/nginx/fastcgi /var/lib/nginx/scgi /var/lib/nginx/uwsgi \
     && chown -R frappe:frappe /var/log/nginx /var/lib/nginx /etc/nginx
 
+# lms's package.json depends on @framework/ui via `link:../../frappe/ui`,
+# a yarn link resolved relative to apps/lms/frontend — valid only once
+# apps/frappe/ui already exists as a sibling app. bench_init's --apps_path
+# installs every app in one shot before that sibling is reliably linkable,
+# so building lms alongside frappe/payments fails with "Rollup failed to
+# resolve import @framework/ui/...". Installing it here, after frappe is
+# already in place, and pointing the link at frappe/ui directly (as the
+# lms repo's own vite.config.js comment prescribes) avoids that ordering
+# problem entirely.
+USER frappe
+WORKDIR /home/frappe/frappe-bench
+RUN bench get-app https://github.com/tirtana888/lms --branch v2.63.0 --skip-assets \
+    && ln -sfn /home/frappe/frappe-bench/apps/frappe/ui \
+         apps/lms/frontend/node_modules/@framework/ui \
+    && bench build --app lms
+
+USER root
 COPY railway/supervisord.conf /etc/supervisor/conf.d/frappe.conf
 COPY railway/nginx-app.conf /etc/nginx/conf.d/frappe.conf
 COPY railway/entrypoint.sh /entrypoint.sh
