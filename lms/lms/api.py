@@ -1468,7 +1468,14 @@ def give_discussions_permission():
 
 @frappe.whitelist()
 def upsert_chapter(
-	title: str, course: str, is_scorm_package: bool, scorm_package: dict = None, name: str = None
+	title: str,
+	course: str,
+	is_scorm_package: bool,
+	scorm_package: dict = None,
+	name: str = None,
+	drip_type: str = None,
+	drip_date: str = None,
+	drip_days: int = None,
 ):
 	if not isinstance(title, str):
 		frappe.throw(_("title must be a string"))
@@ -1480,7 +1487,18 @@ def upsert_chapter(
 	if not can_modify_course(course):
 		frappe.throw(_("You do not have permission to modify this chapter."), frappe.PermissionError)
 
-	values = frappe._dict({"title": title, "course": course, "is_scorm_package": is_scorm_package})
+	values = frappe._dict(
+		{
+			"title": title,
+			"course": course,
+			"is_scorm_package": is_scorm_package,
+			# Doctype-level mandatory_depends_on (Course Chapter) enforces drip_date /
+			# drip_days being set for the type that needs them — no extra checks here.
+			"drip_type": drip_type or "",
+			"drip_date": drip_date if drip_type == "On a fixed date" else None,
+			"drip_days": drip_days if drip_type in ("Days after enrollment", "Days after batch start") else None,
+		}
+	)
 
 	if is_scorm_package:
 		scorm_package = frappe._dict(scorm_package or {})

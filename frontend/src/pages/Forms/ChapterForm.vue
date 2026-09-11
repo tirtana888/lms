@@ -69,6 +69,44 @@
 						</div>
 					</div>
 				</div>
+			<FormControl
+				type="select"
+				:label="__('Release')"
+				v-model="chapter.drip_type"
+				:options="[
+					{ label: __('Immediately'), value: '' },
+					{ label: __('On a fixed date'), value: 'On a fixed date' },
+					{ label: __('Days after enrollment'), value: 'Days after enrollment' },
+					{
+						label: __('Days after batch start'),
+						value: 'Days after batch start',
+					},
+				]"
+			/>
+			<FormControl
+				v-if="chapter.drip_type === 'On a fixed date'"
+				type="date"
+				:label="__('Release Date')"
+				v-model="chapter.drip_date"
+				:required="true"
+			/>
+			<FormControl
+				v-if="
+					chapter.drip_type === 'Days after enrollment' ||
+					chapter.drip_type === 'Days after batch start'
+				"
+				type="number"
+				:label="__('Days')"
+				:description="
+					chapter.drip_type === 'Days after batch start'
+						? __(
+								&quot;Counted from the student's batch start date. Falls back to their enrollment date if they were not enrolled through a batch.&quot;
+							)
+						: __('Counted from when the student enrolled.')
+				"
+				v-model="chapter.drip_days"
+				:required="true"
+			/>
 			</div>
 		</template>
 		<template #actions>
@@ -127,6 +165,9 @@ interface ChapterFields {
 	title: string
 	is_scorm_package: 0 | 1
 	scorm_package: ScormPackage
+	drip_type: string
+	drip_date: string | null
+	drip_days: number | null
 }
 
 const props = defineProps<{
@@ -173,6 +214,9 @@ const chapter = reactive<ChapterFields>({
 	title: '',
 	is_scorm_package: 0,
 	scorm_package: null,
+	drip_type: '',
+	drip_date: null,
+	drip_days: null,
 })
 
 // C4 — edit mode used to be seeded from an in-memory row the parent passed in,
@@ -231,6 +275,9 @@ watch(
 		chapter.title = found?.title ?? ''
 		chapter.is_scorm_package = (found?.is_scorm_package ?? 0) as 0 | 1
 		chapter.scorm_package = toScormPackage(found?.scorm_package)
+		chapter.drip_type = found?.drip_type ?? ''
+		chapter.drip_date = found?.drip_date ?? null
+		chapter.drip_days = found?.drip_days ?? null
 	},
 	{ immediate: true }
 )
@@ -243,6 +290,9 @@ const chapterResource = createResource({
 			course: props.courseName,
 			is_scorm_package: chapter.is_scorm_package,
 			scorm_package: chapter.scorm_package,
+			drip_type: chapter.drip_type,
+			drip_date: chapter.drip_date,
+			drip_days: chapter.drip_days,
 			name: isEdit.value ? props.chapterName : undefined,
 		}
 	},
@@ -254,6 +304,16 @@ const validateChapter = (): string | undefined => {
 	}
 	if (chapter.is_scorm_package && !chapter.scorm_package) {
 		return __('Please upload a SCORM package')
+	}
+	if (chapter.drip_type === 'On a fixed date' && !chapter.drip_date) {
+		return __('Please pick a release date')
+	}
+	if (
+		(chapter.drip_type === 'Days after enrollment' ||
+			chapter.drip_type === 'Days after batch start') &&
+		(chapter.drip_days === null || chapter.drip_days < 0)
+	) {
+		return __('Please enter the number of days')
 	}
 	return undefined
 }

@@ -174,13 +174,58 @@ def enforces_lesson_completion(course: str) -> bool:
 	return bool(get_membership(course))
 
 
+def get_drip_anchor_dates(course: str, member: str | None = None) -> tuple:
+	"""``(enrollment creation datetime, batch start date or None)`` for a member's
+	enrollment in a course. ``(None, None)`` when there is no enrollment — drip,
+	like the completion gate, only applies to enrolled members.
+	"""
+	member = member or frappe.session.user
+	enrollment = frappe.db.get_value(
+		"LMS Enrollment",
+		{"course": course, "member": member},
+		["creation", "enrollment_from_batch"],
+		as_dict=True,
+	)
+	if not enrollment:
+		return None, None
+
+	batch_start = None
+	if enrollment.enrollment_from_batch:
+		batch_start = frappe.db.get_value("LMS Batch", enrollment.enrollment_from_batch, "start_date")
+	return enrollment.creation, batch_start
+
+
+def get_drip_locked_chapters(course: str) -> set:
+	"""Chapter names in ``course`` the current user's drip schedule hasn't released
+	yet. Empty when the course has no drip-scheduled chapters, the user authors the
+	course (same exemption as :func:`enforces_lesson_completion`), or the user isn't
+	enrolled — mirrors the completion gate rather than reimplementing its exemptions.
+	"""
+	if not isinstance(course, str) or not course:
+		return set()
+	if can_modify_course(course):
+		return set()
+
+	from lms.lms.utils import compute_drip_locked_chapters, has_drip_schedule
+
+	if not has_drip_schedule(course):
+		return set()
+
+	enrollment_creation, batch_start = get_drip_anchor_dates(course)
+	if not enrollment_creation:
+		return set()
+	return compute_drip_locked_chapters(course, enrollment_creation, batch_start)
+
+
 def _lock_state(course: str) -> tuple[set, list, set]:
 	"""``(locked names, every name in course order, completed names)``.
 
 	Reads no enrollment pointer: SCORMRenderer runs the lock check on every asset
 	request of a package, and only needs the lock set.
 	"""
-	if not enforces_lesson_completion(course):
+	completion_gate = enforces_lesson_completion(course)
+	drip_locked_chapters = get_drip_locked_chapters(course)
+	if not completion_gate and not drip_locked_chapters:
 		return set(), [], set()
 
 	# Local import: utils imports from permissions at call time, so importing utils at
@@ -190,7 +235,14 @@ def _lock_state(course: str) -> tuple[set, list, set]:
 	rows = get_ordered_lesson_rows(course)
 	completed = get_completed_lessons(course, rows)
 	names = [row.name for row in rows]
-	return compute_locked_lessons(names, completed), names, completed
+
+	locked = set()
+	if completion_gate:
+		locked |= compute_locked_lessons(names, completed)
+	if drip_locked_chapters:
+		locked |= {row.name for row in rows if row.chapter_name in drip_locked_chapters}
+
+	return locked, names, completed
 
 
 def get_lesson_gate(course: str) -> tuple[set, str | None]:

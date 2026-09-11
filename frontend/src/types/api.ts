@@ -94,6 +94,9 @@ export interface OutlineChapter {
 	idx: number
 	is_scorm_package?: 0 | 1
 	scorm_package?: { file_name: string; file_size: number } | null
+	drip_type?: string
+	drip_date?: string | null
+	drip_days?: number | null
 	lessons?: OutlineLesson[]
 }
 

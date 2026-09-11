@@ -14,6 +14,7 @@ from frappe.desk.notifications import extract_mentions
 from frappe.model.document import Document
 from frappe.rate_limiter import rate_limit
 from frappe.utils import (
+	add_days,
 	add_months,
 	cint,
 	flt,
@@ -1222,11 +1223,17 @@ def get_course_outline(course: str, progress: bool = False) -> list:
 	files_by_name = get_scorm_files(chapters)
 	completed = get_completed_lessons(course, lesson_rows) if progress else set()
 
-	from lms.lms.permissions import enforces_lesson_completion
+	from lms.lms.permissions import enforces_lesson_completion, get_drip_locked_chapters
 
 	enforce = enforces_lesson_completion(course) if progress else False
+	# Same gate as _lock_state (permissions.py) — that one guards SCORM/quiz/mark-
+	# complete, this one is what the outline itself renders as locked. They must
+	# agree or a "locked" lesson looks openable right up until the student clicks it.
+	drip_locked_chapters = get_drip_locked_chapters(course) if progress else set()
 
-	return build_outline(chapters, lesson_rows, files_by_name, completed, progress, enforce)
+	return build_outline(
+		chapters, lesson_rows, files_by_name, completed, progress, enforce, drip_locked_chapters
+	)
 
 
 def get_outline_chapter(course: str) -> list:
@@ -1241,6 +1248,9 @@ def get_outline_chapter(course: str) -> list:
 			CourseChapter.name.as_("name"),
 			CourseChapter.title.as_("title"),
 			CourseChapter.is_scorm_package.as_("is_scorm_package"),
+			CourseChapter.drip_type.as_("drip_type"),
+			CourseChapter.drip_date.as_("drip_date"),
+			CourseChapter.drip_days.as_("drip_days"),
 			CourseChapter.launch_file.as_("launch_file"),
 			CourseChapter.scorm_package.as_("scorm_package"),
 		)
@@ -1333,6 +1343,52 @@ def compute_locked_lessons(ordered_lesson_names: list, completed: set) -> set:
 	return locked
 
 
+def has_drip_schedule(course: str) -> bool:
+	"""Whether any chapter in ``course`` has a drip release configured.
+
+	Cheap existence check, kept separate from compute_drip_locked_chapters so the
+	common case (no drip anywhere) short-circuits without resolving an enrollment
+	or reading any chapter fields — same reasoning as enforces_lesson_completion
+	being a single get_value before the heavier lock computation runs.
+	"""
+	return bool(frappe.db.exists("Course Chapter", {"course": course, "drip_type": ("!=", "")}))
+
+
+def compute_drip_locked_chapters(course: str, enrollment_creation, batch_start_date) -> set:
+	"""Chapter names in ``course`` whose drip release hasn't arrived yet.
+
+	enrollment_creation: when the student's LMS Enrollment was created — the anchor
+	for "Days after enrollment", and the fallback anchor for "Days after batch
+	start" when the student didn't come through a batch (so a chapter drip-gated
+	on batch start still opens for a directly-enrolled student instead of staying
+	locked forever with no batch to count from).
+	batch_start_date: the student's batch's start date, or None.
+	"""
+	chapters = frappe.get_all(
+		"Course Chapter",
+		filters={"course": course, "drip_type": ("!=", "")},
+		fields=["name", "drip_type", "drip_date", "drip_days"],
+	)
+	if not chapters:
+		return set()
+
+	today = getdate()
+	enrolled_on = getdate(enrollment_creation)
+	locked = set()
+	for chapter in chapters:
+		if chapter.drip_type == "On a fixed date":
+			release = chapter.drip_date
+		elif chapter.drip_type == "Days after enrollment":
+			release = add_days(enrolled_on, cint(chapter.drip_days))
+		elif chapter.drip_type == "Days after batch start":
+			release = add_days(batch_start_date or enrolled_on, cint(chapter.drip_days))
+		else:
+			continue
+		if release and today < getdate(release):
+			locked.add(chapter.name)
+	return locked
+
+
 def get_ordered_lesson_rows(course: str) -> list:
 	"""Lesson identity rows for a course, in (chapter idx, lesson idx) order.
 
@@ -1375,7 +1431,9 @@ def build_outline(
 	completed: set,
 	progress: bool,
 	enforce_completion: bool = False,
+	drip_locked_chapters: set | None = None,
 ) -> list:
+	drip_locked_chapters = drip_locked_chapters or set()
 	chapter_idx_by_name = {c.name: c.idx for c in chapters}
 	lessons_by_chapter = {}
 	for lr in lesson_rows:
@@ -1396,9 +1454,13 @@ def build_outline(
 			lesson.is_complete = lr.name in completed
 		lessons_by_chapter.setdefault(lr.chapter_name, []).append(lesson)
 
-	if progress and enforce_completion:
-		ordered_names = [lesson.name for c in chapters for lesson in lessons_by_chapter.get(c.name, [])]
-		locked = compute_locked_lessons(ordered_names, completed)
+	if progress and (enforce_completion or drip_locked_chapters):
+		locked = set()
+		if enforce_completion:
+			ordered_names = [lesson.name for c in chapters for lesson in lessons_by_chapter.get(c.name, [])]
+			locked |= compute_locked_lessons(ordered_names, completed)
+		for chapter_name in drip_locked_chapters:
+			locked.update(lesson.name for lesson in lessons_by_chapter.get(chapter_name, []))
 		for lessons in lessons_by_chapter.values():
 			for lesson in lessons:
 				lesson.locked = 1 if lesson.name in locked else 0
@@ -1413,6 +1475,9 @@ def build_outline(
 			name=c.name,
 			title=c.title,
 			is_scorm_package=c.is_scorm_package,
+			drip_type=c.drip_type,
+			drip_date=c.drip_date,
+			drip_days=c.drip_days,
 			launch_file=c.launch_file,
 			scorm_package=c.scorm_package,
 			idx=c.idx,
