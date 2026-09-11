@@ -57,4 +57,13 @@ su frappe -c "bench set-config -g redis_socketio '$REDIS_QUEUE'"
 
 su frappe -c "bench use '$SITE_NAME'"
 
+# get_assets_json() caches assets.json in Redis under a *shared* key
+# (frappe.cache.get_value('assets_json', ..., shared=True)) — a namespace
+# `bench clear-cache` doesn't touch. A stale value from a previous image
+# (different asset hashes) survives file/process changes indefinitely and
+# every page loses its CSS/JS until that Redis key is dropped. Clear it on
+# every boot, after the site and redis config are in place, so a new
+# image's asset hashes always take effect.
+su frappe -c "bench --site '$SITE_NAME' execute frappe.cache.delete_value --args \"['assets_json']\" --kwargs \"{'shared': True}\"" || true
+
 exec supervisord -c /etc/supervisor/conf.d/frappe.conf
