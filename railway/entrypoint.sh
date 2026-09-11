@@ -1,16 +1,45 @@
 #!/bin/bash
-echo "=== DIAGNOSTIC MODE ==="
-echo "--- apps dir ---"
-ls -la /home/frappe/frappe-bench/apps/ 2>&1
-echo "--- sites/apps.txt (image build-time, before volume) ---"
-cat /home/frappe/frappe-bench/sites/apps.txt 2>&1
-echo "--- pip show payments (as frappe) ---"
-su frappe -c "/home/frappe/frappe-bench/env/bin/pip show payments" 2>&1
-echo "--- pip show lms (as frappe) ---"
-su frappe -c "/home/frappe/frappe-bench/env/bin/pip show lms" 2>&1
-echo "--- python import payments (as frappe, using bench's venv python) ---"
-su frappe -c "/home/frappe/frappe-bench/env/bin/python -c 'import payments; print(payments.__file__)'" 2>&1
-echo "--- site-packages easy-install / editable pointers ---"
-su frappe -c "ls /home/frappe/frappe-bench/env/lib/python3.11/site-packages/ | grep -i 'payment\|lms\|__editable__'" 2>&1
-echo "=== SLEEPING FOR INSPECTION ==="
-sleep infinity
+set -e
+
+cd /home/frappe/frappe-bench
+
+if [ -z "$SITE_NAME" ]; then
+  echo "SITE_NAME env var belum di-set, keluar." >&2
+  exit 1
+fi
+
+# The Railway volume mounts as an empty, root-owned dir over sites/, hiding
+# what `bench get-app` wrote there at image-build time and blocking writes
+# from the non-root frappe user bench insists on running as. Fix ownership
+# first (root can always chown), then do everything else as frappe.
+mkdir -p sites
+chown -R frappe:frappe sites
+
+if [ ! -f sites/apps.txt ]; then
+  echo "sites/apps.txt hilang (volume kosong), membuat ulang..."
+  su frappe -c "printf 'frappe\npayments\nlms\n' > sites/apps.txt"
+fi
+if [ ! -f sites/common_site_config.json ]; then
+  su frappe -c "echo '{}' > sites/common_site_config.json"
+fi
+
+if [ ! -d "sites/$SITE_NAME" ]; then
+  echo "Site $SITE_NAME belum ada, membuat baru..."
+  su frappe -c "bench new-site '$SITE_NAME' \
+    --db-host '$DB_HOST' \
+    --db-port '${DB_PORT:-3306}' \
+    --mariadb-root-password '$MYSQL_ROOT_PASSWORD' \
+    --admin-password '$ADMIN_PASSWORD' \
+    --no-mariadb-socket \
+    --install-app lms"
+
+  su frappe -c "bench --site '$SITE_NAME' set-config redis_cache '$REDIS_CACHE'"
+  su frappe -c "bench --site '$SITE_NAME' set-config redis_queue '$REDIS_QUEUE'"
+  su frappe -c "bench --site '$SITE_NAME' set-config redis_socketio '$REDIS_QUEUE'"
+else
+  echo "Site $SITE_NAME sudah ada, lewati bootstrap."
+fi
+
+su frappe -c "bench use '$SITE_NAME'"
+
+exec supervisord -c /etc/supervisor/conf.d/frappe.conf
