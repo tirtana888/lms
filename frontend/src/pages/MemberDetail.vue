@@ -5,6 +5,13 @@
 	<template v-else>
 		<PageHeader :breadcrumbs="breadcrumbs">
 			<template #actions>
+				<Dropdown v-if="memberRow" :options="manageOptions" placement="left">
+					<Button variant="outline" :label="__('Manage')">
+						<template #suffix>
+							<span class="lucide-chevron-down size-4" aria-hidden="true" />
+						</template>
+					</Button>
+				</Dropdown>
 				<HeaderButton
 					v-if="activeTab === 'Roles'"
 					data-testid="member-save"
@@ -88,12 +95,76 @@
 
 					<div>
 						<div class="text-p-sm-medium text-ink-gray-7 mb-2">{{ __('Tags') }}</div>
-						<div v-if="overview.tags.length" class="flex flex-wrap gap-1.5">
-							<Badge v-for="tag in overview.tags" :key="tag" theme="gray" variant="subtle">
+						<div class="flex flex-wrap items-center gap-1.5">
+							<Badge
+								v-for="tag in overview.tags"
+								:key="tag"
+								theme="gray"
+								variant="subtle"
+								class="flex items-center gap-1"
+							>
 								{{ tag }}
+								<button
+									type="button"
+									class="lucide-x size-3 text-ink-gray-5 hover:text-ink-gray-8"
+									:aria-label="__('Remove tag {0}').format(tag)"
+									@click="handleRemoveTag(tag)"
+								/>
 							</Badge>
+							<FormControl
+								v-model="newTag"
+								type="text"
+								:placeholder="__('Add a tag')"
+								class="w-36"
+								@keyup.enter="handleAddTag()"
+							/>
+							<Button
+								variant="subtle"
+								:label="__('Add')"
+								data-testid="add-tag"
+								@click="handleAddTag()"
+							/>
 						</div>
-						<div v-else class="text-p-sm text-ink-gray-5">{{ __('No tags yet.') }}</div>
+					</div>
+
+					<div>
+						<div class="text-p-sm-medium text-ink-gray-7 mb-2">{{ __('Notes') }}</div>
+						<div v-if="overview.notes.length" class="mb-3 space-y-2">
+							<div
+								v-for="note in overview.notes"
+								:key="note.name"
+								class="rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-3 text-p-sm"
+							>
+								<div class="flex items-start justify-between gap-2">
+									<p class="whitespace-pre-wrap text-ink-gray-8">{{ note.content }}</p>
+									<button
+										type="button"
+										class="lucide-trash-2 size-3.5 shrink-0 text-ink-gray-4 hover:text-ink-gray-7"
+										:aria-label="__('Delete note')"
+										@click="handleDeleteNote(note.name)"
+									/>
+								</div>
+								<div class="mt-1.5 text-p-xs text-ink-gray-5">
+									{{ note.comment_by }} · {{ formatDate(note.creation, true) }}
+								</div>
+							</div>
+						</div>
+						<div v-else class="mb-3 text-p-sm text-ink-gray-5">{{ __('No notes yet.') }}</div>
+						<div class="flex items-start gap-2">
+							<FormControl
+								v-model="newNote"
+								type="textarea"
+								:placeholder="__('Add a note')"
+								class="flex-1"
+							/>
+							<Button
+								variant="solid"
+								:label="__('Add')"
+								:loading="addingNote"
+								data-testid="add-note"
+								@click="handleAddNote()"
+							/>
+						</div>
 					</div>
 				</div>
 
@@ -105,8 +176,10 @@
 							:key="row.course"
 							class="flex items-center gap-3 border-b border-outline-gray-1 py-3 text-p-sm last:border-0"
 						>
-							<span class="flex-1 truncate text-ink-gray-8">{{ row.course_title }}</span>
-							<ProgressBar :progress="Math.round(row.progress ?? 0)" class="!mx-0 w-32 shrink-0" />
+							<span class="min-w-0 flex-1 truncate text-ink-gray-8">{{ row.course_title }}</span>
+							<div class="w-32 shrink-0">
+								<ProgressBar :progress="Math.round(row.progress ?? 0)" class="!mx-0" />
+							</div>
 							<span class="w-10 shrink-0 text-right text-ink-gray-6">{{ Math.round(row.progress ?? 0) }}%</span>
 						</div>
 					</div>
@@ -148,8 +221,10 @@
 							:key="row.program"
 							class="flex items-center gap-3 border-b border-outline-gray-1 py-3 text-p-sm last:border-0"
 						>
-							<span class="flex-1 truncate text-ink-gray-8">{{ row.program }}</span>
-							<ProgressBar :progress="Math.round(row.progress ?? 0)" class="!mx-0 w-32 shrink-0" />
+							<span class="min-w-0 flex-1 truncate text-ink-gray-8">{{ row.program }}</span>
+							<div class="w-32 shrink-0">
+								<ProgressBar :progress="Math.round(row.progress ?? 0)" class="!mx-0" />
+							</div>
 							<span class="w-10 shrink-0 text-right text-ink-gray-6">{{ Math.round(row.progress ?? 0) }}%</span>
 						</div>
 					</div>
@@ -175,7 +250,7 @@
 	</template>
 </template>
 <script setup lang="ts">
-import { Avatar, Badge, call, createResource, TabButtons, toast } from 'frappe-ui'
+import { Avatar, Badge, Button, call, createResource, Dropdown, FormControl, TabButtons, toast } from 'frappe-ui'
 import ProgressBar from '@/components/ProgressBar.vue'
 import { computed, inject, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
@@ -187,7 +262,13 @@ import { notifyMembersChanged } from '@/stores/members'
 import { cleanError } from '@/utils'
 import type { Breadcrumb, Resource, SessionUser } from '@/types'
 
-type MemberRow = { name: string; full_name: string; user_image?: string; roles?: string[] }
+type MemberRow = {
+	name: string
+	full_name: string
+	user_image?: string
+	roles?: string[]
+	enabled?: number
+}
 
 type MemberOverviewRow = {
 	course?: string
@@ -201,11 +282,14 @@ type MemberOverviewRow = {
 	ip_address?: string
 }
 
+type MemberNote = { name: string; content: string; comment_by: string; creation: string }
+
 type MemberOverview = {
 	last_login: string | null
 	last_active: string | null
 	last_ip: string | null
 	tags: string[]
+	notes: MemberNote[]
 	enrollments: MemberOverviewRow[]
 	quiz_submissions: MemberOverviewRow[]
 	avg_quiz_score: number | null
@@ -293,6 +377,59 @@ watch(
 	{ immediate: true }
 )
 
+const errorMessage = (err: { messages?: string[] }, fallback: string): string =>
+	cleanError(err.messages?.[0]) || fallback
+
+async function resendInvitation() {
+	try {
+		// Frappe's own public "forgot password" endpoint — deliberately
+		// permission-check-free (silently no-ops for a disabled/nonexistent
+		// user, same generic response either way) — doubles as a resend of the
+		// original "set your password" invitation email.
+		await call('frappe.core.doctype.user.user.reset_password', { user: props.memberID })
+		toast.success(__('Invitation email sent'))
+	} catch (err: any) {
+		toast.error(errorMessage(err, __('Unable to send the invitation')))
+	}
+}
+
+async function handleSuspend() {
+	try {
+		await call('lms.lms.api.suspend_member', { member: props.memberID })
+		if (memberFetch.data) memberFetch.data.enabled = 0
+		toast.success(__('Member suspended'))
+		notifyMembersChanged()
+	} catch (err: any) {
+		toast.error(errorMessage(err, __('Unable to suspend this member')))
+	}
+}
+
+async function handleUnsuspend() {
+	try {
+		await call('lms.lms.api.unsuspend_member', { member: props.memberID })
+		if (memberFetch.data) memberFetch.data.enabled = 1
+		toast.success(__('Member unsuspended'))
+		notifyMembersChanged()
+	} catch (err: any) {
+		toast.error(errorMessage(err, __('Unable to unsuspend this member')))
+	}
+}
+
+const manageOptions = computed(() => [
+	{
+		label: __('Resend invitation'),
+		icon: 'lucide-mail',
+		onClick: resendInvitation,
+	},
+	memberRow.value?.enabled
+		? { label: __('Suspend user'), icon: 'lucide-ban', theme: 'red', onClick: handleSuspend }
+		: {
+				label: __('Unsuspend user'),
+				icon: 'lucide-check-circle',
+				onClick: handleUnsuspend,
+		  },
+])
+
 const overviewFetch = createResource({
 	url: 'lms.lms.api.get_member_overview',
 	makeParams: () => ({ member: props.memberID }),
@@ -337,8 +474,62 @@ function formatDate(value: string | null | undefined, withTime = false): string 
 	return withTime ? date.toLocaleString() : date.toLocaleDateString()
 }
 
-const errorMessage = (err: { messages?: string[] }, fallback: string): string =>
-	cleanError(err.messages?.[0]) || fallback
+const newTag = ref('')
+
+async function handleAddTag() {
+	const tag = newTag.value.trim()
+	if (!tag || !overviewFetch.data) return
+	try {
+		overviewFetch.data.tags = await call('lms.lms.api.add_member_tag', {
+			member: props.memberID,
+			tag,
+		})
+		newTag.value = ''
+	} catch (err: any) {
+		toast.error(errorMessage(err, __('Unable to add tag')))
+	}
+}
+
+async function handleRemoveTag(tag: string) {
+	if (!overviewFetch.data) return
+	try {
+		overviewFetch.data.tags = await call('lms.lms.api.remove_member_tag', {
+			member: props.memberID,
+			tag,
+		})
+	} catch (err: any) {
+		toast.error(errorMessage(err, __('Unable to remove tag')))
+	}
+}
+
+const newNote = ref('')
+const addingNote = ref(false)
+
+async function handleAddNote() {
+	const content = newNote.value.trim()
+	if (!content || !overviewFetch.data) return
+	addingNote.value = true
+	try {
+		overviewFetch.data.notes = await call('lms.lms.api.add_member_note', {
+			member: props.memberID,
+			content,
+		})
+		newNote.value = ''
+	} catch (err: any) {
+		toast.error(errorMessage(err, __('Unable to add note')))
+	} finally {
+		addingNote.value = false
+	}
+}
+
+async function handleDeleteNote(name: string) {
+	if (!overviewFetch.data) return
+	try {
+		overviewFetch.data.notes = await call('lms.lms.api.delete_member_note', { name })
+	} catch (err: any) {
+		toast.error(errorMessage(err, __('Unable to delete note')))
+	}
+}
 
 const saveRoles = async () => {
 	if (refusal.value || submitting.value || !memberRow.value) return

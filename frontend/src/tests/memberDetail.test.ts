@@ -40,6 +40,33 @@ vi.mock('frappe-ui', () => ({
 	Avatar: { props: ['image', 'label', 'size'], template: `<div />` },
 	Badge: { template: `<span><slot /></span>` },
 	Breadcrumbs: { props: ['items'], template: `<nav><slot /></nav>` },
+	Button: {
+		props: ['variant', 'label', 'loading', 'theme'],
+		emits: ['click'],
+		template: `<button :disabled="loading" @click="$emit('click')"><slot name="prefix" /><slot name="suffix" />{{ label }}<slot /></button>`,
+	},
+	// Flattened, not a real popover: renders every option as its own button so
+	// a test can click one directly, the same simplification TabButtons below
+	// already makes for its own options.
+	Dropdown: {
+		props: ['options', 'placement'],
+		template: `
+			<div>
+				<slot />
+				<button
+					v-for="opt in options"
+					:key="opt.label"
+					:data-testid="'menu-' + opt.label"
+					@click="opt.onClick && opt.onClick()"
+				>{{ opt.label }}</button>
+			</div>
+		`,
+	},
+	FormControl: {
+		props: ['modelValue', 'type', 'placeholder', 'label'],
+		emits: ['update:modelValue'],
+		template: `<input :data-testid="'field-' + (placeholder || label)" :value="modelValue" @input="$emit('update:modelValue', $event.target.value)" @keyup.enter="$emit('keyup-enter')" />`,
+	},
 	TabButtons: {
 		props: ['options', 'modelValue'],
 		emits: ['update:modelValue'],
@@ -338,6 +365,110 @@ describe('the member detail page', () => {
 			await flushPromises()
 
 			expect(overview.fetch).toHaveBeenCalledTimes(1)
+		})
+	})
+
+	describe('the Manage menu', () => {
+		it('offers Suspend for an enabled member and Unsuspend for a suspended one', async () => {
+			const router = makeRouter()
+			await router.push(`/users/${MEMBER}`)
+			lookup.data = { name: MEMBER, full_name: 'Jane Doe', roles: [], enabled: 1 }
+			const wrapper = await mountDetail(router)
+			await flushPromises()
+
+			expect(wrapper.find('[data-testid="menu-Suspend user"]').exists()).toBe(true)
+			expect(wrapper.find('[data-testid="menu-Unsuspend user"]').exists()).toBe(false)
+
+			lookup.data = { ...lookup.data, enabled: 0 }
+			await flushPromises()
+
+			expect(wrapper.find('[data-testid="menu-Suspend user"]').exists()).toBe(false)
+			expect(wrapper.find('[data-testid="menu-Unsuspend user"]').exists()).toBe(true)
+		})
+
+		it('suspends the member and flips the menu without a refetch', async () => {
+			const router = makeRouter()
+			await router.push(`/users/${MEMBER}`)
+			lookup.data = { name: MEMBER, full_name: 'Jane Doe', roles: [], enabled: 1 }
+			const wrapper = await mountDetail(router)
+			callMock.mockResolvedValue(undefined)
+
+			await wrapper.find('[data-testid="menu-Suspend user"]').trigger('click')
+			await flushPromises()
+
+			expect(callMock).toHaveBeenCalledWith('lms.lms.api.suspend_member', { member: MEMBER })
+			expect(wrapper.find('[data-testid="menu-Unsuspend user"]').exists()).toBe(true)
+		})
+
+		it('resends the invitation through the public reset_password endpoint', async () => {
+			const router = makeRouter()
+			await router.push(`/users/${MEMBER}`)
+			lookup.data = { name: MEMBER, full_name: 'Jane Doe', roles: [], enabled: 1 }
+			const wrapper = await mountDetail(router)
+			callMock.mockResolvedValue(undefined)
+
+			await wrapper.find('[data-testid="menu-Resend invitation"]').trigger('click')
+			await flushPromises()
+
+			expect(callMock).toHaveBeenCalledWith('frappe.core.doctype.user.user.reset_password', {
+				user: MEMBER,
+			})
+			expect(toastMock.success).toHaveBeenCalled()
+		})
+	})
+
+	describe('tags and notes', () => {
+		const baseOverview = {
+			last_login: null,
+			last_active: null,
+			last_ip: null,
+			tags: ['vip'],
+			notes: [],
+			enrollments: [],
+			quiz_submissions: [],
+			avg_quiz_score: null,
+			certificates: [],
+			programs: [],
+			recent_logins: [],
+		}
+
+		it('adds a tag and re-renders the badge list from the response', async () => {
+			const router = makeRouter()
+			await router.push(`/users/${MEMBER}`)
+			lookup.data = { name: MEMBER, full_name: 'Jane Doe', roles: [] }
+			overview.data = { ...baseOverview }
+			const wrapper = await mountDetail(router)
+			callMock.mockResolvedValue(['vip', 'scholarship'])
+
+			await wrapper.find('[data-testid="field-Add a tag"]').setValue('scholarship')
+			await wrapper.find('[data-testid="add-tag"]').trigger('click')
+			await flushPromises()
+
+			expect(callMock).toHaveBeenCalledWith('lms.lms.api.add_member_tag', {
+				member: MEMBER,
+				tag: 'scholarship',
+			})
+			expect(overview.data.tags).toEqual(['vip', 'scholarship'])
+		})
+
+		it('adds a note and clears the textarea', async () => {
+			const router = makeRouter()
+			await router.push(`/users/${MEMBER}`)
+			lookup.data = { name: MEMBER, full_name: 'Jane Doe', roles: [] }
+			overview.data = { ...baseOverview }
+			const wrapper = await mountDetail(router)
+			const newNote = { name: 'c1', content: 'Great progress', comment_by: 'mod@example.com', creation: '2026-01-01' }
+			callMock.mockResolvedValue([newNote])
+
+			await wrapper.find('[data-testid="field-Add a note"]').setValue('Great progress')
+			await wrapper.find('[data-testid="add-note"]').trigger('click')
+			await flushPromises()
+
+			expect(callMock).toHaveBeenCalledWith('lms.lms.api.add_member_note', {
+				member: MEMBER,
+				content: 'Great progress',
+			})
+			expect(overview.data.notes).toEqual([newNote])
 		})
 	})
 })

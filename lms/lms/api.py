@@ -1054,6 +1054,7 @@ MEMBER_FIELDS = [
 	"last_active",
 	"creation",
 	"_user_tags",
+	"enabled",
 ]
 
 
@@ -1104,8 +1105,10 @@ def get_members(start: int = 0, search: str = None, role: str = "All"):
 	if search is not None and not isinstance(search, str):
 		frappe.throw(_("Invalid search query."), frappe.ValidationError)
 
+	# No `enabled = 1` filter: a suspended member (see suspend_member below) must
+	# stay visible here, or a Moderator would have no way to find and
+	# unsuspend them again — the frontend marks them instead.
 	filters = [
-		["enabled", "=", 1],
 		["name", "not in", ["Administrator", "Guest"]],
 	]
 	or_filters = {}
@@ -1231,6 +1234,7 @@ def get_member_overview(member: str):
 		"last_active": user.last_active,
 		"last_ip": user.last_ip,
 		"tags": [tag for tag in (user._user_tags or "").split(",") if tag],
+		"notes": get_member_notes(member),
 		"enrollments": enrollments,
 		"quiz_submissions": quiz_submissions[:20],
 		"avg_quiz_score": round(sum(scored) / len(scored), 2) if scored else None,
@@ -1238,6 +1242,129 @@ def get_member_overview(member: str):
 		"programs": programs,
 		"recent_logins": recent_logins,
 	}
+
+
+def _member_tags(member: str) -> list[str]:
+	tags = frappe.db.get_value("User", member, "_user_tags") or ""
+	return [tag for tag in tags.split(",") if tag]
+
+
+def _validate_member(member: str) -> str:
+	member = (member or "").strip()
+	if not member or member in ["Administrator", "Guest"]:
+		frappe.throw(_("Invalid member."), frappe.ValidationError)
+	if not frappe.db.exists("User", member):
+		frappe.throw(_("Member {0} does not exist.").format(member), frappe.DoesNotExistError)
+	return member
+
+
+@frappe.whitelist()
+def add_member_tag(member: str, tag: str):
+	"""Moderator-only wrapper around the same `_user_tags` column Frappe's own
+	frappe.desk.doctype.tag.tag.add_tag writes — not calling that function
+	directly: it has no permission check of its own (a bare frappe.db.set_value),
+	so exposing it as-is would let any logged-in user tag any User record.
+	"""
+	frappe.only_for(["Moderator"])
+	member = _validate_member(member)
+	tag = (tag or "").strip()
+	if not tag:
+		frappe.throw(_("Tag cannot be empty."), frappe.ValidationError)
+
+	current = _member_tags(member)
+	if tag not in current:
+		if not frappe.db.exists("Tag", tag):
+			frappe.get_doc({"doctype": "Tag", "name": tag}).insert(ignore_permissions=True)
+		current.append(tag)
+		frappe.db.set_value("User", member, "_user_tags", "," + ",".join(current), update_modified=False)
+	return current
+
+
+@frappe.whitelist()
+def remove_member_tag(member: str, tag: str):
+	frappe.only_for(["Moderator"])
+	member = _validate_member(member)
+	current = [t for t in _member_tags(member) if t.lower() != (tag or "").strip().lower()]
+	frappe.db.set_value(
+		"User", member, "_user_tags", ("," + ",".join(current)) if current else "", update_modified=False
+	)
+	return current
+
+
+@frappe.whitelist()
+def get_member_notes(member: str) -> list:
+	frappe.only_for(["Moderator"])
+	member = _validate_member(member)
+	return frappe.get_all(
+		"Comment",
+		{"reference_doctype": "User", "reference_name": member, "comment_type": "Comment"},
+		["name", "content", "comment_by", "creation"],
+		order_by="creation desc",
+	)
+
+
+@frappe.whitelist()
+def add_member_note(member: str, content: str):
+	"""Moderator-only wrapper around the Comment doctype — not Frappe's own
+	frappe.desk.form.utils.add_comment: that calls reference_doc.check_permission()
+	first, which fails for Moderator (the core User doctype's permission list
+	only grants System Manager read/write — the same reason get_member/
+	get_member_overview/save_role all go around it via ignore_permissions).
+	"""
+	frappe.only_for(["Moderator"])
+	member = _validate_member(member)
+	content = (content or "").strip()
+	if not content:
+		frappe.throw(_("Note cannot be empty."), frappe.ValidationError)
+
+	comment = frappe.new_doc("Comment")
+	comment.update(
+		{
+			"comment_type": "Comment",
+			"reference_doctype": "User",
+			"reference_name": member,
+			"comment_email": frappe.session.user,
+			"comment_by": frappe.utils.get_fullname(frappe.session.user),
+			"content": content,
+		}
+	)
+	comment.insert(ignore_permissions=True)
+	return get_member_notes(member)
+
+
+@frappe.whitelist()
+def delete_member_note(name: str):
+	frappe.only_for(["Moderator"])
+	comment = frappe.get_doc("Comment", name)
+	if comment.reference_doctype != "User":
+		frappe.throw(_("Invalid note."), frappe.PermissionError)
+	member = comment.reference_name
+	frappe.delete_doc("Comment", name, ignore_permissions=True, force=True)
+	return get_member_notes(member)
+
+
+def _set_member_enabled(member: str, enabled: int) -> None:
+	member = _validate_member(member)
+	frappe.db.set_value("User", member, "enabled", enabled)
+	frappe.clear_cache(user=member)
+
+
+@frappe.whitelist()
+def suspend_member(member: str):
+	"""Sets User.enabled = 0 — the same field get_members used to hard-filter
+	on (now removed there, or a suspended member could never be found again
+	to unsuspend). Frappe checks `enabled` at login, not per-request, so an
+	already-open session is not force-ended by this — it takes effect on
+	their next login.
+	"""
+	frappe.only_for(["Moderator"])
+	_set_member_enabled(member, 0)
+
+
+@frappe.whitelist()
+def unsuspend_member(member: str):
+	frappe.only_for(["Moderator"])
+	_set_member_enabled(member, 1)
 
 
 def check_app_permission():

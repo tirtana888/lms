@@ -41,7 +41,12 @@
 			>
 				<Avatar size="sm" :image="row.user_image" :label="row.full_name" />
 				<div class="flex min-w-0 flex-col">
-					<span class="truncate">{{ row.full_name }}</span>
+					<span class="flex items-center gap-1.5 truncate">
+						{{ row.full_name }}
+						<Badge v-if="!row.enabled" theme="red" variant="subtle">
+							{{ __('Suspended') }}
+						</Badge>
+					</span>
 					<span class="truncate text-p-xs text-ink-gray-5">{{ row.name }}</span>
 				</div>
 			</router-link>
@@ -153,6 +158,7 @@ type Member = {
 	creation?: string
 	_user_tags?: string
 	batches?: string[]
+	enabled?: number
 }
 
 // Matches MEMBERS_PAGE_LENGTH in lms/lms/api.py, which pages `start` by this.
