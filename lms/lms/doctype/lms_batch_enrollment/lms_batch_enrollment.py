@@ -112,6 +112,13 @@ class LMSBatchEnrollment(Document):
 				enrollment.course = course.course
 				enrollment.member = self.member
 				enrollment.enrollment_from_batch = self.batch
+				# This LMS Batch Enrollment row has not been inserted yet (we are still
+				# inside its own validate()), so LMSEnrollment's own exists() check for
+				# a real batch enrollment would find none and wrongly throw "You cannot
+				# enroll in an unpublished course" — even though every check above this
+				# point (seats, access code, self-enrollment, payment) already vouches
+				# for this exact member joining this exact batch right now.
+				enrollment.flags.skip_batch_enrollment_check = True
 				enrollment.save()
 
 	def add_member_to_live_class(self):

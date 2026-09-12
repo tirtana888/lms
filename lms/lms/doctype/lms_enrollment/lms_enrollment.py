@@ -84,7 +84,14 @@ class LMSEnrollment(Document):
 			):
 				frappe.throw(_("This batch is not associated with this course."))
 
-			if frappe.db.exists(
+			# The trusted cascade (LMSBatchEnrollment.validate_course_enrollment) creates
+			# this enrollment from inside the batch enrollment's own validate() — before
+			# that row's INSERT has run — so the exists() check below would still see
+			# "absent" and wrongly fall through to the published check. `flags` is a
+			# Python-only attribute no whitelisted API can set, so only that trusted
+			# call site can take this branch; a forged enrollment_from_batch from a
+			# direct insert still has to pass the exists() check.
+			if self.flags.skip_batch_enrollment_check or frappe.db.exists(
 				"LMS Batch Enrollment", {"batch": self.enrollment_from_batch, "member": self.member}
 			):
 				return
