@@ -195,6 +195,17 @@
 					</Draggable>
 
 					<div v-if="draft" class="mt-3" data-testid="draft-card">
+						<div
+							v-if="aiReviewTotal > 0 && draft?.question"
+							class="mb-2 flex items-center gap-1.5 text-p-sm text-ink-gray-5"
+						>
+							<span class="lucide-sparkles size-3.5" />
+							{{
+								__(
+									'AI-generated question {0} of {1} - review and save or discard'
+								).format(aiReviewIndex, aiReviewTotal)
+							}}
+						</div>
 						<QuestionCard
 							:key="draftKey"
 							:row="draft"
@@ -413,7 +424,7 @@
 		:title="__('Generate Questions with AI')"
 		:actions="[
 			{
-				label: __('Generate'),
+				label: aiGenerating ? __('Generating...') : __('Generate'),
 				variant: 'solid',
 				disabled: !aiTopic.trim() || aiGenerating,
 				loading: aiGenerating,
@@ -422,7 +433,23 @@
 		]"
 	>
 		<template #default>
-			<div class="space-y-4">
+			<div
+				v-if="aiGenerating"
+				class="mb-4 flex items-center gap-3 rounded bg-surface-gray-2 p-3 text-p-sm text-ink-gray-7"
+			>
+				<LoadingIndicator class="size-4 shrink-0" />
+				{{
+					__(
+						'Generating {0} question(s) with {1}… this can take up to 30 seconds.'
+					).format(aiCount, aiProvider === 'deepseek' ? 'DeepSeek' : 'Gemini')
+				}}
+			</div>
+			<div
+				:class="[
+					'space-y-4',
+					{ 'pointer-events-none opacity-40': aiGenerating },
+				]"
+			>
 				<FormControl
 					type="textarea"
 					v-model="aiTopic"
@@ -589,6 +616,9 @@ const aiTypes = reactive({ choices: true, userInput: true, openEnded: true })
 const aiReferenceText = ref('')
 const aiGenerating = ref(false)
 const aiQueue = ref([])
+// For the "AI-generated question X of Y" progress label while reviewing the queue.
+const aiReviewTotal = ref(0)
+const aiReviewIndex = ref(0)
 
 const openAiDialog = () => {
 	showAiDialog.value = true
@@ -600,6 +630,7 @@ const openAiDialog = () => {
 const advanceAiQueue = () => {
 	if (!aiQueue.value.length) return
 	const next = aiQueue.value.shift()
+	aiReviewIndex.value++
 	draft.value = {
 		...next,
 		name: DRAFT_ROW_NAME,
@@ -634,6 +665,8 @@ const generateWithAi = async () => {
 			reference_text: aiReferenceText.value || null,
 		})
 		aiQueue.value = results || []
+		aiReviewTotal.value = aiQueue.value.length
+		aiReviewIndex.value = 0
 		showAiDialog.value = false
 		if (draft.value) {
 			// A manual draft is already open; queue behind it instead of
