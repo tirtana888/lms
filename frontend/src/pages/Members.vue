@@ -253,7 +253,7 @@ watch(membersRevision, () => {
 // The sidebar item is already hidden from a non-moderator, but the route
 // itself has a real address now (unlike the old settings-dialog panel, which
 // no URL could reach on its own) — so a typed-in link needs the same refusal
-// MemberForm.vue's own deep link already handles, not a get_members call a
+// MemberDetail.vue's own deep link already handles, not a get_members call a
 // non-moderator was never going to see the results of. Mirrors QuizSubmissions.vue's
 // admin gate.
 onMounted(() => {
@@ -264,15 +264,20 @@ onMounted(() => {
 	refreshMembers()
 })
 
+// A real page now (MemberDetail.vue), not a modal stacked on this list — plain
+// navigation, not openFormRoute's back-tracking. Lands on Roles, matching
+// this menu item's name; the row's own name link opens the same page onto
+// Overview instead (query.tab), further down in the template.
 const openEditMember = (member: Member) => {
-	openFormRoute(router, {
+	router.push({
 		name: 'MemberForm',
 		params: { memberID: member.name },
+		query: { tab: 'Roles' },
 	})
 }
 
 const openNewMember = () => {
-	openFormRoute(router, { name: 'MemberForm', params: { memberID: 'new' } })
+	openFormRoute(router, { name: 'NewMemberForm' })
 }
 
 const openDeleteDialog = (member: Member) => {

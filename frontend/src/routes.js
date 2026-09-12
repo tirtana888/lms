@@ -415,18 +415,27 @@ export const routes = [
 	// than buried in the Settings dialog — Settings itself keeps floating over
 	// whatever page the URL points at for everything else, so
 	// '/settings' and '/settings/:item' still fall through to NotFound.
+	//
+	// Same shape as Courses: 'new' is a static child (a modal stacked on the
+	// list, for adding a member) and the dynamic member page is its own
+	// top-level route below, not nested — a full page, not an overlay.
 	{
 		path: '/users',
 		name: 'Members',
 		component: () => import('@/pages/Members.vue'),
 		children: [
 			{
-				path: ':memberID',
-				name: 'MemberForm',
-				component: () => import('@/pages/Forms/MemberForm.vue'),
-				props: true,
+				path: 'new',
+				name: 'NewMemberForm',
+				component: () => import('@/pages/Forms/NewMemberForm.vue'),
 			},
 		],
+	},
+	{
+		path: '/users/:memberID',
+		name: 'MemberForm',
+		component: () => import('@/pages/MemberDetail.vue'),
+		props: true,
 	},
 	{
 		path: '/:pathMatch(.*)*',
