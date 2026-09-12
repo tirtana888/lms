@@ -99,69 +99,72 @@
 
 				<div v-else-if="activeTab === 'Courses'" data-testid="member-courses">
 					<div v-if="!overview.enrollments.length" class="text-p-sm text-ink-gray-5">{{ __('No enrollments yet.') }}</div>
-					<div v-else class="space-y-1.5">
+					<div v-else>
 						<div
 							v-for="row in overview.enrollments"
 							:key="row.course"
-							class="flex items-center justify-between text-p-sm"
+							class="flex items-center gap-3 border-b border-outline-gray-1 py-3 text-p-sm last:border-0"
 						>
-							<span class="text-ink-gray-8">{{ row.course_title }}</span>
-							<span class="text-ink-gray-5">{{ row.progress }}%</span>
+							<span class="flex-1 truncate text-ink-gray-8">{{ row.course_title }}</span>
+							<ProgressBar :progress="Math.round(row.progress ?? 0)" class="!mx-0 w-32 shrink-0" />
+							<span class="w-10 shrink-0 text-right text-ink-gray-6">{{ Math.round(row.progress ?? 0) }}%</span>
 						</div>
 					</div>
 				</div>
 
 				<div v-else-if="activeTab === 'Quizzes'" data-testid="member-quizzes">
 					<div v-if="!overview.quiz_submissions.length" class="text-p-sm text-ink-gray-5">{{ __('No quiz submissions yet.') }}</div>
-					<div v-else class="space-y-1.5">
+					<div v-else>
 						<div
 							v-for="(row, idx) in overview.quiz_submissions"
 							:key="idx"
-							class="flex items-center justify-between text-p-sm"
+							class="flex items-center justify-between border-b border-outline-gray-1 py-3 text-p-sm last:border-0"
 						>
 							<span class="text-ink-gray-8">{{ row.quiz }}</span>
-							<span class="text-ink-gray-5">{{ row.percentage }}%</span>
+							<span class="text-ink-gray-6">{{ Math.round(row.percentage ?? 0) }}%</span>
 						</div>
 					</div>
 				</div>
 
 				<div v-else-if="activeTab === 'Certificates'" data-testid="member-certificates">
 					<div v-if="!overview.certificates.length" class="text-p-sm text-ink-gray-5">{{ __('No certificates yet.') }}</div>
-					<div v-else class="space-y-1.5">
+					<div v-else>
 						<div
 							v-for="row in overview.certificates"
 							:key="row.course"
-							class="flex items-center justify-between text-p-sm"
+							class="flex items-center justify-between border-b border-outline-gray-1 py-3 text-p-sm last:border-0"
 						>
 							<span class="text-ink-gray-8">{{ row.course_title }}</span>
-							<span class="text-ink-gray-5">{{ formatDate(row.issue_date) }}</span>
+							<span class="text-ink-gray-6">{{ formatDate(row.issue_date) }}</span>
 						</div>
 					</div>
 				</div>
 
 				<div v-else-if="activeTab === 'Programs'" data-testid="member-programs">
 					<div v-if="!overview.programs.length" class="text-p-sm text-ink-gray-5">{{ __('Not enrolled in any program.') }}</div>
-					<div v-else class="space-y-1.5">
+					<div v-else>
 						<div
 							v-for="row in overview.programs"
 							:key="row.program"
-							class="flex items-center justify-between text-p-sm"
+							class="flex items-center gap-3 border-b border-outline-gray-1 py-3 text-p-sm last:border-0"
 						>
-							<span class="text-ink-gray-8">{{ row.program }}</span>
-							<span class="text-ink-gray-5">{{ row.progress }}%</span>
+							<span class="flex-1 truncate text-ink-gray-8">{{ row.program }}</span>
+							<ProgressBar :progress="Math.round(row.progress ?? 0)" class="!mx-0 w-32 shrink-0" />
+							<span class="w-10 shrink-0 text-right text-ink-gray-6">{{ Math.round(row.progress ?? 0) }}%</span>
 						</div>
 					</div>
 				</div>
 
 				<div v-else-if="activeTab === 'Activity'" data-testid="member-activity">
 					<div v-if="!overview.recent_logins.length" class="text-p-sm text-ink-gray-5">{{ __('No recent logins.') }}</div>
-					<div v-else class="space-y-1.5">
+					<div v-else>
 						<div
 							v-for="(row, idx) in overview.recent_logins"
 							:key="idx"
-							class="flex items-center justify-between text-p-sm"
+							class="flex items-center gap-3 border-b border-outline-gray-1 py-3 text-p-sm last:border-0"
 						>
-							<span class="text-ink-gray-8">{{ formatDate(row.creation, true) }}</span>
+							<span class="lucide-log-in size-4 shrink-0 text-ink-gray-4" aria-hidden="true" />
+							<span class="flex-1 text-ink-gray-8">{{ formatDate(row.creation, true) }}</span>
 							<span class="text-ink-gray-5">{{ row.ip_address }}</span>
 						</div>
 					</div>
@@ -173,6 +176,7 @@
 </template>
 <script setup lang="ts">
 import { Avatar, Badge, call, createResource, TabButtons, toast } from 'frappe-ui'
+import ProgressBar from '@/components/ProgressBar.vue'
 import { computed, inject, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import BooleanSwitch from '@/components/Controls/BooleanSwitch.vue'
@@ -307,7 +311,7 @@ const overviewStats = computed(() => {
 		{
 			icon: 'lucide-percent',
 			label: __('Avg. quiz score'),
-			value: data.avg_quiz_score != null ? data.avg_quiz_score + '%' : '—',
+			value: data.avg_quiz_score != null ? Math.round(data.avg_quiz_score) + '%' : '—',
 		},
 	]
 })
