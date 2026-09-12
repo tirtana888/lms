@@ -29,7 +29,11 @@
 					<FileUploader
 						v-if="!chapter.scorm_package"
 						:fileTypes="['.zip']"
-						:uploadArgs="{ private: true }"
+						:uploadArgs="{
+							private: true,
+							upload_endpoint: '/api/method/lms.lms.api.upload_scorm_package',
+							docname: props.courseName,
+						}"
 						:validateFile="validateFile"
 						@success="(file) => (chapter.scorm_package = file)"
 					>

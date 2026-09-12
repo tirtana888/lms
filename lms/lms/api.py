@@ -2005,6 +2005,53 @@ def upload_lesson_scorm(course: str, lesson: str, scorm_package: dict):
 	}
 
 
+@frappe.whitelist()
+def upload_scorm_package():
+	"""Upload a SCORM .zip for a course, as its own endpoint rather than
+	Frappe's generic upload_file.
+
+	upload_file (frappe/handler.py) restricts any user without Desk access to
+	JPG/PNG/GIF/PDF/TXT/CSV/Office files — .zip is not on that list. Every LMS
+	role (Moderator, Course Creator, Batch Evaluator, LMS Student) is created
+	with desk_access=0 (lms/install.py), so no non-System-Manager account could
+	ever get a SCORM package past that check, regardless of course permission.
+	Authorization here is can_modify_course() instead, same as every other
+	chapter/lesson-editing endpoint in this file.
+
+	frappe-ui's FileUploader posts straight to whatever `upload_endpoint` its
+	uploadArgs names (fileUploadHandler.ts), carrying only its own fixed set of
+	fields — course identifies the course via `docname`, the same field name
+	FileUploader already forwards for attaching to a document.
+	"""
+	course = frappe.form_dict.docname
+	if not isinstance(course, str) or not course:
+		frappe.throw(_("course is required."))
+	if not can_modify_course(course):
+		frappe.throw(_("You do not have permission to upload content for this course."), frappe.PermissionError)
+
+	files = frappe.request.files
+	if "file" not in files:
+		frappe.throw(_("Please attach a file."))
+	file = files["file"]
+	content = file.stream.read()
+	filename = file.filename
+
+	if not filename or not filename.lower().endswith(".zip"):
+		frappe.throw(_("Please upload a .zip file."))
+
+	return frappe.get_doc(
+		{
+			"doctype": "File",
+			"attached_to_doctype": "LMS Course",
+			"attached_to_name": course,
+			"folder": frappe.form_dict.folder or "Home",
+			"file_name": filename,
+			"is_private": cint(frappe.form_dict.is_private),
+			"content": content,
+		}
+	).insert(ignore_permissions=True)
+
+
 def add_lesson(title: str, chapter: str, course: str, idx: int):
 	lesson = frappe.new_doc("Course Lesson")
 	lesson.update(

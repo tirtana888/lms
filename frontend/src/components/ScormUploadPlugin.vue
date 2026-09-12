@@ -9,7 +9,11 @@
 	<FileUploader
 		v-else
 		:fileTypes="['.zip']"
-		:uploadArgs="{ private: true }"
+		:uploadArgs="{
+			private: true,
+			upload_endpoint: '/api/method/lms.lms.api.upload_scorm_package',
+			docname: course,
+		}"
 		:validateFile="validateFile"
 		@success="onFileUploaded"
 	>
