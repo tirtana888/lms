@@ -447,6 +447,17 @@
 						]"
 						class="w-40"
 					/>
+					<FormControl
+						type="select"
+						v-model="aiDifficulty"
+						:label="__('Difficulty')"
+						:options="[
+							{ label: __('Easy'), value: 'Easy' },
+							{ label: __('Medium'), value: 'Medium' },
+							{ label: __('Hard'), value: 'Hard' },
+						]"
+						class="w-40"
+					/>
 				</div>
 				<div class="space-y-2">
 					<div class="text-p-sm text-ink-gray-6">{{ __('Question types') }}</div>
@@ -564,6 +575,7 @@ const showAiDialog = ref(false)
 const aiTopic = ref('')
 const aiCount = ref(5)
 const aiProvider = ref('gemini')
+const aiDifficulty = ref('Medium')
 const aiTypes = reactive({ choices: true, userInput: true, openEnded: true })
 const aiReferenceText = ref('')
 const aiGenerating = ref(false)
@@ -607,6 +619,7 @@ const generateWithAi = async () => {
 			topic: aiTopic.value,
 			count: aiCount.value,
 			question_types: types,
+			difficulty: aiDifficulty.value,
 			provider: aiProvider.value,
 			reference_text: aiReferenceText.value || null,
 		})

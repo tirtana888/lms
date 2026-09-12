@@ -27,6 +27,7 @@ from frappe.utils import cint
 from lms.lms.utils import has_course_instructor_role, has_moderator_role
 
 ALLOWED_TYPES = ("Choices", "User Input", "Open Ended")
+ALLOWED_DIFFICULTIES = ("Easy", "Medium", "Hard")
 MAX_COUNT = 20
 MAX_OPTIONS = 10
 MAX_POSSIBILITIES = 10
@@ -51,14 +52,22 @@ def _clean_types(question_types) -> list[str]:
 	return cleaned
 
 
-def _response_schema(allowed_types: list[str]) -> dict:
+def _response_schema(allowed_types: list[str], count: int) -> dict:
 	"""JSON Schema for the model's structured output, shared by both providers
-	(Gemini's responseSchema and DeepSeek's json_schema use the same shape)."""
+	(Gemini's responseSchema and DeepSeek's json_schema use the same shape).
+
+	minItems/maxItems pin the array to exactly `count` - without them a model
+	satisfies the schema just as validly with 1 item as with `count`, since
+	plain JSON Schema doesn't otherwise constrain array length, which is why
+	requests for e.g. 5 questions were coming back with only 1.
+	"""
 	return {
 		"type": "object",
 		"properties": {
 			"questions": {
 				"type": "array",
+				"minItems": count,
+				"maxItems": count,
 				"items": {
 					"type": "object",
 					"properties": {
@@ -87,7 +96,13 @@ def _response_schema(allowed_types: list[str]) -> dict:
 	}
 
 
-def _build_prompt(topic: str, count: int, allowed_types: list[str], reference_text: str | None) -> str:
+def _build_prompt(
+	topic: str,
+	count: int,
+	allowed_types: list[str],
+	difficulty: str,
+	reference_text: str | None,
+) -> str:
 	type_notes = {
 		"Choices": (
 			"Choices: 2-6 short options. Exactly one option has is_correct true unless "
@@ -108,11 +123,14 @@ def _build_prompt(topic: str, count: int, allowed_types: list[str], reference_te
 	}
 	notes = "\n".join(f"- {type_notes[t]}" for t in allowed_types)
 	parts = [
-		f"You are writing {count} quiz question(s) for a course on: {topic.strip()}",
+		f"You are writing quiz questions for a course on: {topic.strip()}",
+		f"Return EXACTLY {count} question(s) - the questions array must contain "
+		f"exactly {count} item(s), no more and no fewer, even if that means "
+		"covering closely related sub-topics to fill it out.",
+		f"Target difficulty: {difficulty}.",
 		"Only use these question types, exactly as spelled: " + ", ".join(allowed_types) + ".",
 		notes,
 		"Write plain question text (no markdown headers, no numbering prefix).",
-		"Match the difficulty and terminology to the topic description.",
 	]
 	if reference_text:
 		# Truncated: this is student-facing lesson material handed to the model as
@@ -136,7 +154,7 @@ def _call_gemini(prompt: str, schema: dict) -> dict:
 
 	url = (
 		"https://generativelanguage.googleapis.com/v1beta/models/"
-		"gemini-flash-latest:generateContent"
+		"gemini-3.8-flash:generateContent"
 	)
 	response = requests.post(
 		url,
@@ -182,7 +200,7 @@ def _call_deepseek(prompt: str, schema: dict) -> dict:
 		"https://api.deepseek.com/chat/completions",
 		headers={"Authorization": f"Bearer {api_key}"},
 		json={
-			"model": "deepseek-chat",
+			"model": "deepseek-flash",
 			"messages": [{"role": "user", "content": schema_prompt}],
 			"response_format": {"type": "json_object"},
 		},
@@ -241,6 +259,7 @@ def generate_quiz_questions(
 	topic: str,
 	count: int | str = 5,
 	question_types: list | str | None = None,
+	difficulty: str = "Medium",
 	provider: str = "gemini",
 	reference_text: str | None = None,
 ):
@@ -252,11 +271,13 @@ def generate_quiz_questions(
 
 	count = min(max(cint(count) or 5, 1), MAX_COUNT)
 	allowed_types = _clean_types(question_types)
+	if not isinstance(difficulty, str) or difficulty not in ALLOWED_DIFFICULTIES:
+		difficulty = "Medium"
 	if reference_text is not None and not isinstance(reference_text, str):
 		frappe.throw(_("reference_text must be a string."))
 
-	prompt = _build_prompt(topic, count, allowed_types, reference_text)
-	schema = _response_schema(allowed_types)
+	prompt = _build_prompt(topic, count, allowed_types, difficulty, reference_text)
+	schema = _response_schema(allowed_types, count)
 
 	if provider == "deepseek":
 		raw = _call_deepseek(prompt, schema)
