@@ -414,7 +414,16 @@ watch(
 )
 
 watch(course, () => {
-	if (!isAdmin.value && !course.data?.published && !course.data?.upcoming) {
+	// A private (unpublished) course stays open to whoever get_course_details
+	// already granted it to — an enrolled member (e.g. via a Batch bundling
+	// this course) shows up here with `membership` set, same as any other
+	// enrolled course. Only bounce visitors who are neither staff nor enrolled.
+	if (
+		!isAdmin.value &&
+		!course.data?.published &&
+		!course.data?.upcoming &&
+		!course.data?.membership
+	) {
 		router.push({
 			name: 'Courses',
 		})
