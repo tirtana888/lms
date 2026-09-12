@@ -196,6 +196,7 @@
 
 					<div v-if="draft" class="mt-3" data-testid="draft-card">
 						<QuestionCard
+							:key="draftKey"
 							:row="draft"
 							:index="questions.length"
 							:quizName="quizDetails.doc.name"
@@ -564,6 +565,14 @@ const addSelectedFromBank = () => bankPanel.value?.addSelected()
 // The draft lives here, never in doc.questions, which reload and setValue replace wholesale.
 const draft = ref(null)
 
+// QuestionCard only re-applies its incoming row inside onMounted (see the
+// component for why), so swapping draft.value to a DIFFERENT question - as
+// advanceAiQueue does, right after the previous one clears - would otherwise
+// never actually remount the card, leaving every AI-queued question showing
+// (and saving) the first one's content. Bump this on every new draft so
+// :key forces a fresh instance.
+const draftKey = ref(0)
+
 // Not a sentinel. QuestionCard derives its DOM ids from row.name, so a draft needs one.
 const DRAFT_ROW_NAME = 'new-question'
 
@@ -598,6 +607,7 @@ const advanceAiQueue = () => {
 		multiple: next.multiple || 0,
 		question_detail: next.question,
 	}
+	draftKey.value++
 }
 
 const generateWithAi = async () => {
@@ -935,6 +945,7 @@ const addBlankQuestion = () => {
 		type: toBackendType(nextQuestionUiType(questions.value)).type,
 		question_detail: '',
 	}
+	draftKey.value++
 }
 
 // The card owns the type while open, and this mirror keeps hasOpenEnded right meanwhile.
