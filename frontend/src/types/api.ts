@@ -86,6 +86,9 @@ export interface OutlineLesson {
 	icon?: string
 	is_complete?: boolean
 	locked?: 0 | 1
+	/** Set only when `locked` and the lock is drip (not sequential-completion) —
+	 * the date this student's own drip schedule opens it. */
+	unlock_date?: string | null
 }
 
 export interface OutlineChapter {

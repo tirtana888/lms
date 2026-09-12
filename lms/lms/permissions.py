@@ -205,25 +205,26 @@ def get_drip_anchor_dates(course: str, member: str | None = None) -> tuple:
 	return enrollment.creation, batch_start
 
 
-def get_drip_locked_chapters(course: str) -> set:
+def get_drip_locked_chapters(course: str) -> dict:
 	"""Chapter names in ``course`` the current user's drip schedule hasn't released
-	yet. Empty when the course has no drip-scheduled chapters, the user authors the
-	course (same exemption as :func:`enforces_lesson_completion`), or the user isn't
+	yet, mapped to the date each unlocks (see compute_drip_locked_chapters). Empty
+	when the course has no drip-scheduled chapters, the user authors the course
+	(same exemption as :func:`enforces_lesson_completion`), or the user isn't
 	enrolled — mirrors the completion gate rather than reimplementing its exemptions.
 	"""
 	if not isinstance(course, str) or not course:
-		return set()
+		return {}
 	if can_modify_course(course):
-		return set()
+		return {}
 
 	from lms.lms.utils import compute_drip_locked_chapters, has_drip_schedule
 
 	if not has_drip_schedule(course):
-		return set()
+		return {}
 
 	enrollment_creation, batch_start = get_drip_anchor_dates(course)
 	if not enrollment_creation:
-		return set()
+		return {}
 	return compute_drip_locked_chapters(course, enrollment_creation, batch_start)
 
 

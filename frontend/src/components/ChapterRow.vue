@@ -142,14 +142,13 @@
 									/>
 								</div>
 								<template v-if="lesson.locked">
-									<span
-										class="lucide-lock-keyhole h-4 w-4 text-ink-gray-4 ms-2"
-										:title="
-											__('Complete the previous lesson to unlock this one')
-										"
-										aria-hidden="true"
-									/>
-									<span class="sr-only">{{ __('Locked') }}</span>
+									<Tooltip :text="lockMessage(lesson)" placement="top">
+										<span
+											class="lucide-lock-keyhole h-4 w-4 text-ink-gray-4 ms-2"
+											aria-hidden="true"
+										/>
+									</Tooltip>
+									<span class="sr-only">{{ lockMessage(lesson) }}</span>
 								</template>
 								<span
 									v-else-if="lesson.is_complete"
@@ -175,6 +174,7 @@
 <script setup lang="ts">
 import { Button, TextInput, Tooltip, toast } from 'frappe-ui'
 import { computed, inject, nextTick, ref, watch } from 'vue'
+import dayjs from '@/utils/dayjs'
 import Draggable from 'vuedraggable'
 import { Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -294,6 +294,17 @@ function isActiveLesson(lessonNumber: string): boolean {
 		route.params.chapterNumber == lessonNumber.split('-')[0] &&
 		route.params.lessonNumber == lessonNumber.split('-')[1]
 	)
+}
+
+// Drip and sequential-completion both set `lesson.locked`, but only drip
+// resolves to a date (per this student's own enrollment/batch anchor — see
+// resolve_drip_release_date) — sequential locking has no date, it just waits
+// on the previous lesson, so that case keeps the original wording.
+function lockMessage(lesson: OutlineLesson): string {
+	if (lesson.unlock_date) {
+		return __('Unlocks on {0}').format(dayjs(lesson.unlock_date).format('D MMM YYYY'))
+	}
+	return __('Complete the previous lesson to unlock this one')
 }
 
 // Admins (editorLinks) deep-link into the in-page editor; everyone else

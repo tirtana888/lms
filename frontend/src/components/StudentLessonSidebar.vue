@@ -93,11 +93,13 @@
 									/>
 									<span class="truncate flex-1">{{ lesson.title }}</span>
 									<template v-if="lesson.locked">
-										<LockKeyhole
-											class="size-4 stroke-1.5 shrink-0 text-ink-gray-4"
-											aria-hidden="true"
-										/>
-										<span class="sr-only">{{ __('Locked') }}</span>
+										<Tooltip :text="lockMessage(lesson)" placement="top">
+											<LockKeyhole
+												class="size-4 stroke-1.5 shrink-0 text-ink-gray-4"
+												aria-hidden="true"
+											/>
+										</Tooltip>
+										<span class="sr-only">{{ lockMessage(lesson) }}</span>
 									</template>
 									<CircleCheck
 										v-else-if="lesson.is_complete"
@@ -120,8 +122,9 @@
 <script setup>
 import { computed, watch, watchEffect } from 'vue'
 import { useRoute } from 'vue-router'
-import { createResource } from 'frappe-ui'
+import { createResource, Tooltip } from 'frappe-ui'
 import { Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/vue'
+import dayjs from '@/utils/dayjs'
 import {
 	ChevronDown,
 	Circle,
@@ -212,6 +215,16 @@ function iconFor(icon) {
 
 function isActive(number) {
 	return props.selectedLessonNumber === number
+}
+
+// Drip and sequential-completion both set `lesson.locked`, but only drip
+// resolves to a date (per this student's own enrollment/batch anchor) —
+// sequential locking just waits on the previous lesson and has no date.
+function lockMessage(lesson) {
+	if (lesson.unlock_date) {
+		return __('Unlocks on {0}').format(dayjs(lesson.unlock_date).format('D MMM YYYY'))
+	}
+	return __('Complete the previous lesson to unlock this one')
 }
 
 function onLessonClick(lesson) {

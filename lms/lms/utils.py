@@ -1245,7 +1245,7 @@ def get_course_outline(course: str, progress: bool = False) -> list:
 	# Same gate as _lock_state (permissions.py) — that one guards SCORM/quiz/mark-
 	# complete, this one is what the outline itself renders as locked. They must
 	# agree or a "locked" lesson looks openable right up until the student clicks it.
-	drip_locked_chapters = get_drip_locked_chapters(course) if progress else set()
+	drip_locked_chapters = get_drip_locked_chapters(course) if progress else {}
 
 	return build_outline(
 		chapters, lesson_rows, files_by_name, completed, progress, enforce, drip_locked_chapters
@@ -1397,8 +1397,14 @@ def is_drip_blocked(drip_type, drip_date, drip_days, enrollment_creation, batch_
 	return bool(release) and getdate() < getdate(release)
 
 
-def compute_drip_locked_chapters(course: str, enrollment_creation, batch_start_date) -> set:
-	"""Chapter names in ``course`` whose drip release hasn't arrived yet.
+def compute_drip_locked_chapters(course: str, enrollment_creation, batch_start_date) -> dict:
+	"""Chapter names in ``course`` whose drip release hasn't arrived yet, mapped to
+	the date each one unlocks — the same date resolve_drip_release_date already
+	computes to decide the lock, just kept instead of discarded, so the outline
+	can tell a student *when* rather than only *that* a chapter is still locked.
+	A dict rather than a set: every existing caller only ever tests membership
+	(`in`), truthiness, or iterates keys, all of which a dict satisfies exactly
+	like the set it replaces.
 
 	enrollment_creation: when the student's LMS Enrollment was created — the anchor
 	for "Days after enrollment", and the fallback anchor for "Days after batch
@@ -1413,14 +1419,16 @@ def compute_drip_locked_chapters(course: str, enrollment_creation, batch_start_d
 		fields=["name", "drip_type", "drip_date", "drip_days"],
 	)
 	if not chapters:
-		return set()
+		return {}
 
-	locked = set()
+	locked = {}
 	for chapter in chapters:
 		if is_drip_blocked(
 			chapter.drip_type, chapter.drip_date, chapter.drip_days, enrollment_creation, batch_start_date
 		):
-			locked.add(chapter.name)
+			locked[chapter.name] = resolve_drip_release_date(
+				chapter.drip_type, chapter.drip_date, chapter.drip_days, enrollment_creation, batch_start_date
+			)
 	return locked
 
 
@@ -1466,9 +1474,9 @@ def build_outline(
 	completed: set,
 	progress: bool,
 	enforce_completion: bool = False,
-	drip_locked_chapters: set | None = None,
+	drip_locked_chapters: dict | None = None,
 ) -> list:
-	drip_locked_chapters = drip_locked_chapters or set()
+	drip_locked_chapters = drip_locked_chapters or {}
 	chapter_idx_by_name = {c.name: c.idx for c in chapters}
 	lessons_by_chapter = {}
 	for lr in lesson_rows:
@@ -1494,8 +1502,10 @@ def build_outline(
 		if enforce_completion:
 			ordered_names = [lesson.name for c in chapters for lesson in lessons_by_chapter.get(c.name, [])]
 			locked |= compute_locked_lessons(ordered_names, completed)
-		for chapter_name in drip_locked_chapters:
-			locked.update(lesson.name for lesson in lessons_by_chapter.get(chapter_name, []))
+		for chapter_name, unlock_date in drip_locked_chapters.items():
+			for lesson in lessons_by_chapter.get(chapter_name, []):
+				locked.add(lesson.name)
+				lesson.unlock_date = unlock_date
 		for lessons in lessons_by_chapter.values():
 			for lesson in lessons:
 				lesson.locked = 1 if lesson.name in locked else 0
