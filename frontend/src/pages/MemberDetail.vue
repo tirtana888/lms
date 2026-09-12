@@ -29,148 +29,11 @@
 				</div>
 			</div>
 
-			<div class="mb-6 mt-8">
-				<TabButtons
-					:options="[
-						{ label: __('Overview'), value: 'Overview' },
-						{ label: __('Roles'), value: 'Roles' },
-					]"
-					v-model="activeTab"
-				/>
+			<div class="mb-6 mt-8 overflow-x-auto">
+				<TabButtons :options="tabOptions" v-model="activeTab" class="w-fit" />
 			</div>
 
-			<div v-if="activeTab === 'Overview'" data-testid="member-overview" class="space-y-5">
-				<div v-if="overviewFetch.loading" class="text-p-sm text-ink-gray-5">
-					{{ __('Loading...') }}
-				</div>
-				<template v-else-if="overview">
-					<div class="grid grid-cols-2 gap-4 text-p-sm sm:grid-cols-4">
-						<div>
-							<div class="text-ink-gray-5">{{ __('Last login') }}</div>
-							<div class="text-ink-gray-9">
-								{{ formatDate(overview.last_login) }}
-							</div>
-						</div>
-						<div>
-							<div class="text-ink-gray-5">{{ __('Last active') }}</div>
-							<div class="text-ink-gray-9">
-								{{ formatDate(overview.last_active) }}
-							</div>
-						</div>
-						<div>
-							<div class="text-ink-gray-5">{{ __('Last IP') }}</div>
-							<div class="text-ink-gray-9">{{ overview.last_ip || '—' }}</div>
-						</div>
-						<div>
-							<div class="text-ink-gray-5">{{ __('Avg. quiz score') }}</div>
-							<div class="text-ink-gray-9">
-								{{
-									overview.avg_quiz_score != null
-										? overview.avg_quiz_score + '%'
-										: '—'
-								}}
-							</div>
-						</div>
-					</div>
-
-					<div v-if="overview.tags.length" class="flex flex-wrap gap-1.5">
-						<Badge v-for="tag in overview.tags" :key="tag" theme="gray" variant="subtle">
-							{{ tag }}
-						</Badge>
-					</div>
-
-					<div>
-						<div class="text-p-sm-medium text-ink-gray-7 mb-2">
-							{{ __('Courses') }} ({{ overview.enrollments.length }})
-						</div>
-						<div v-if="!overview.enrollments.length" class="text-p-sm text-ink-gray-5">
-							{{ __('No enrollments yet.') }}
-						</div>
-						<div v-else class="space-y-1.5">
-							<div
-								v-for="row in overview.enrollments"
-								:key="row.course"
-								class="flex items-center justify-between text-p-sm"
-							>
-								<span class="text-ink-gray-8">{{ row.course_title }}</span>
-								<span class="text-ink-gray-5">{{ row.progress }}%</span>
-							</div>
-						</div>
-					</div>
-
-					<div>
-						<div class="text-p-sm-medium text-ink-gray-7 mb-2">
-							{{ __('Quiz submissions') }} ({{ overview.quiz_submissions.length }})
-						</div>
-						<div v-if="!overview.quiz_submissions.length" class="text-p-sm text-ink-gray-5">
-							{{ __('No quiz submissions yet.') }}
-						</div>
-						<div v-else class="space-y-1.5">
-							<div
-								v-for="(row, idx) in overview.quiz_submissions"
-								:key="idx"
-								class="flex items-center justify-between text-p-sm"
-							>
-								<span class="text-ink-gray-8">{{ row.quiz }}</span>
-								<span class="text-ink-gray-5">{{ row.percentage }}%</span>
-							</div>
-						</div>
-					</div>
-
-					<div>
-						<div class="text-p-sm-medium text-ink-gray-7 mb-2">
-							{{ __('Certificates') }} ({{ overview.certificates.length }})
-						</div>
-						<div v-if="!overview.certificates.length" class="text-p-sm text-ink-gray-5">
-							{{ __('No certificates yet.') }}
-						</div>
-						<div v-else class="space-y-1.5">
-							<div
-								v-for="row in overview.certificates"
-								:key="row.course"
-								class="flex items-center justify-between text-p-sm"
-							>
-								<span class="text-ink-gray-8">{{ row.course_title }}</span>
-								<span class="text-ink-gray-5">{{ formatDate(row.issue_date) }}</span>
-							</div>
-						</div>
-					</div>
-
-					<div v-if="overview.programs.length">
-						<div class="text-p-sm-medium text-ink-gray-7 mb-2">
-							{{ __('Programs') }}
-						</div>
-						<div class="space-y-1.5">
-							<div
-								v-for="row in overview.programs"
-								:key="row.program"
-								class="flex items-center justify-between text-p-sm"
-							>
-								<span class="text-ink-gray-8">{{ row.program }}</span>
-								<span class="text-ink-gray-5">{{ row.progress }}%</span>
-							</div>
-						</div>
-					</div>
-
-					<div v-if="overview.recent_logins.length">
-						<div class="text-p-sm-medium text-ink-gray-7 mb-2">
-							{{ __('Recent logins') }}
-						</div>
-						<div class="space-y-1.5">
-							<div
-								v-for="(row, idx) in overview.recent_logins"
-								:key="idx"
-								class="flex items-center justify-between text-p-sm"
-							>
-								<span class="text-ink-gray-8">{{ formatDate(row.creation, true) }}</span>
-								<span class="text-ink-gray-5">{{ row.ip_address }}</span>
-							</div>
-						</div>
-					</div>
-				</template>
-			</div>
-
-			<div v-else data-testid="member-roles" class="flex flex-col gap-2">
+			<div v-if="activeTab === 'Roles'" data-testid="member-roles" class="flex flex-col gap-2">
 				<div class="grid md:grid-cols-2 gap-x-6 gap-y-3">
 					<BooleanSwitch size="sm" :label="__('Student')" v-model="roles.lms_student" />
 					<BooleanSwitch
@@ -185,6 +48,125 @@
 					/>
 					<BooleanSwitch size="sm" :label="__('Moderator')" v-model="roles.moderator" />
 				</div>
+			</div>
+
+			<!-- Every other tab shares one loading state — there's a single
+			     get_member_overview fetch behind all six of them, not one per
+			     tab, so "loading" isn't a per-tab thing to represent separately. -->
+			<div v-else data-testid="member-tab-panel">
+				<div v-if="overviewFetch.loading" class="text-p-sm text-ink-gray-5">
+					{{ __('Loading...') }}
+				</div>
+				<template v-else-if="overview">
+					<div v-if="activeTab === 'Overview'" data-testid="member-overview" class="space-y-6">
+					<div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+						<div
+							v-for="stat in overviewStats"
+							:key="stat.label"
+							class="rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-3"
+						>
+							<span :class="stat.icon" class="size-4 text-ink-gray-6" aria-hidden="true" />
+							<div class="mt-2 text-xl-semibold text-ink-gray-9">{{ stat.value }}</div>
+							<div class="text-p-sm text-ink-gray-6">{{ stat.label }}</div>
+						</div>
+					</div>
+
+					<div class="grid grid-cols-2 gap-4 text-p-sm sm:grid-cols-3">
+						<div>
+							<div class="text-ink-gray-5">{{ __('Last login') }}</div>
+							<div class="text-ink-gray-9">{{ formatDate(overview.last_login) }}</div>
+						</div>
+						<div>
+							<div class="text-ink-gray-5">{{ __('Last active') }}</div>
+							<div class="text-ink-gray-9">{{ formatDate(overview.last_active) }}</div>
+						</div>
+						<div>
+							<div class="text-ink-gray-5">{{ __('Last IP') }}</div>
+							<div class="text-ink-gray-9">{{ overview.last_ip || '—' }}</div>
+						</div>
+					</div>
+
+					<div>
+						<div class="text-p-sm-medium text-ink-gray-7 mb-2">{{ __('Tags') }}</div>
+						<div v-if="overview.tags.length" class="flex flex-wrap gap-1.5">
+							<Badge v-for="tag in overview.tags" :key="tag" theme="gray" variant="subtle">
+								{{ tag }}
+							</Badge>
+						</div>
+						<div v-else class="text-p-sm text-ink-gray-5">{{ __('No tags yet.') }}</div>
+					</div>
+				</div>
+
+				<div v-else-if="activeTab === 'Courses'" data-testid="member-courses">
+					<div v-if="!overview.enrollments.length" class="text-p-sm text-ink-gray-5">{{ __('No enrollments yet.') }}</div>
+					<div v-else class="space-y-1.5">
+						<div
+							v-for="row in overview.enrollments"
+							:key="row.course"
+							class="flex items-center justify-between text-p-sm"
+						>
+							<span class="text-ink-gray-8">{{ row.course_title }}</span>
+							<span class="text-ink-gray-5">{{ row.progress }}%</span>
+						</div>
+					</div>
+				</div>
+
+				<div v-else-if="activeTab === 'Quizzes'" data-testid="member-quizzes">
+					<div v-if="!overview.quiz_submissions.length" class="text-p-sm text-ink-gray-5">{{ __('No quiz submissions yet.') }}</div>
+					<div v-else class="space-y-1.5">
+						<div
+							v-for="(row, idx) in overview.quiz_submissions"
+							:key="idx"
+							class="flex items-center justify-between text-p-sm"
+						>
+							<span class="text-ink-gray-8">{{ row.quiz }}</span>
+							<span class="text-ink-gray-5">{{ row.percentage }}%</span>
+						</div>
+					</div>
+				</div>
+
+				<div v-else-if="activeTab === 'Certificates'" data-testid="member-certificates">
+					<div v-if="!overview.certificates.length" class="text-p-sm text-ink-gray-5">{{ __('No certificates yet.') }}</div>
+					<div v-else class="space-y-1.5">
+						<div
+							v-for="row in overview.certificates"
+							:key="row.course"
+							class="flex items-center justify-between text-p-sm"
+						>
+							<span class="text-ink-gray-8">{{ row.course_title }}</span>
+							<span class="text-ink-gray-5">{{ formatDate(row.issue_date) }}</span>
+						</div>
+					</div>
+				</div>
+
+				<div v-else-if="activeTab === 'Programs'" data-testid="member-programs">
+					<div v-if="!overview.programs.length" class="text-p-sm text-ink-gray-5">{{ __('Not enrolled in any program.') }}</div>
+					<div v-else class="space-y-1.5">
+						<div
+							v-for="row in overview.programs"
+							:key="row.program"
+							class="flex items-center justify-between text-p-sm"
+						>
+							<span class="text-ink-gray-8">{{ row.program }}</span>
+							<span class="text-ink-gray-5">{{ row.progress }}%</span>
+						</div>
+					</div>
+				</div>
+
+				<div v-else-if="activeTab === 'Activity'" data-testid="member-activity">
+					<div v-if="!overview.recent_logins.length" class="text-p-sm text-ink-gray-5">{{ __('No recent logins.') }}</div>
+					<div v-else class="space-y-1.5">
+						<div
+							v-for="(row, idx) in overview.recent_logins"
+							:key="idx"
+							class="flex items-center justify-between text-p-sm"
+						>
+							<span class="text-ink-gray-8">{{ formatDate(row.creation, true) }}</span>
+							<span class="text-ink-gray-5">{{ row.ip_address }}</span>
+						</div>
+					</div>
+				</div>
+			</template>
 			</div>
 		</div>
 	</template>
@@ -228,6 +210,15 @@ type MemberOverview = {
 	recent_logins: MemberOverviewRow[]
 }
 
+type DetailTab =
+	| 'Overview'
+	| 'Courses'
+	| 'Quizzes'
+	| 'Certificates'
+	| 'Programs'
+	| 'Activity'
+	| 'Roles'
+
 const props = defineProps<{ memberID: string }>()
 
 const user = inject<SessionUser>('$user')!
@@ -244,11 +235,19 @@ const refusal = computed(() => {
 	return ''
 })
 
+const tabOptions: { label: string; value: DetailTab }[] = [
+	{ label: __('Overview'), value: 'Overview' },
+	{ label: __('Courses'), value: 'Courses' },
+	{ label: __('Quizzes'), value: 'Quizzes' },
+	{ label: __('Certificates'), value: 'Certificates' },
+	{ label: __('Programs'), value: 'Programs' },
+	{ label: __('Activity'), value: 'Activity' },
+	{ label: __('Roles'), value: 'Roles' },
+]
+
 // Members.vue's name link opens straight onto Overview; the "..." menu's Edit
 // member opens onto Roles instead.
-const activeTab = ref<'Roles' | 'Overview'>(
-	route.query.tab === 'Roles' ? 'Roles' : 'Overview'
-)
+const activeTab = ref<DetailTab>(route.query.tab === 'Roles' ? 'Roles' : 'Overview')
 
 const ROLE_MAP: Record<string, string> = {
 	moderator: 'Moderator',
@@ -298,13 +297,29 @@ const overviewFetch = createResource({
 
 const overview = computed<MemberOverview | null>(() => overviewFetch.data ?? null)
 
-// Lazy + immediate: most visits land on Overview directly (the name link), but
-// a visit that starts on Roles (the "..." menu) should still fetch it the
-// moment someone switches tabs, not only on a later change.
+const overviewStats = computed(() => {
+	const data = overview.value
+	if (!data) return []
+	return [
+		{ icon: 'lucide-book-open', label: __('Courses'), value: data.enrollments.length },
+		{ icon: 'lucide-award', label: __('Certificates'), value: data.certificates.length },
+		{ icon: 'lucide-route', label: __('Programs'), value: data.programs.length },
+		{
+			icon: 'lucide-percent',
+			label: __('Avg. quiz score'),
+			value: data.avg_quiz_score != null ? data.avg_quiz_score + '%' : '—',
+		},
+	]
+})
+
+// Lazy + immediate: most visits land on Overview directly (the name link),
+// but a visit that starts on Roles (the "..." menu) should still fetch it
+// the moment someone switches to ANY of the other six tabs — they all read
+// from this same `overview` object — not only on a later change.
 watch(
 	activeTab,
 	(tab) => {
-		if (tab === 'Overview' && !overviewFetch.data && !overviewFetch.loading) {
+		if (tab !== 'Roles' && !overviewFetch.data && !overviewFetch.loading) {
 			overviewFetch.fetch()
 		}
 	},

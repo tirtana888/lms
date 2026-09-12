@@ -202,7 +202,10 @@ describe('the member detail page', () => {
 			lookup.data = { name: MEMBER, full_name: 'Jane Doe', roles: [] }
 			const wrapper = await mountDetail(router)
 
-			expect(overviewPane(wrapper).exists()).toBe(true)
+			// Not overviewPane specifically: all six non-Roles tabs share one
+			// loading state, so which one resolves is unknown until the fetch
+			// this assertion is itself confirming has even happened.
+			expect(wrapper.find('[data-testid="member-tab-panel"]').exists()).toBe(true)
 			expect(rolesPane(wrapper).exists()).toBe(false)
 			expect(overview.fetch).toHaveBeenCalled()
 		})
@@ -265,6 +268,76 @@ describe('the member detail page', () => {
 			// Stays on the page — this is a real page now, not a modal that
 			// dismisses itself on save.
 			expect(router.currentRoute.value.name).toBe('MemberForm')
+		})
+	})
+
+	// The Overview tab used to hold every section at once; it's now split
+	// across Overview/Courses/Quizzes/Certificates/Programs/Activity, each
+	// reading its own slice of the SAME `overview` object.
+	describe('the categorized tabs', () => {
+		const overviewData = {
+			last_login: null,
+			last_active: null,
+			last_ip: null,
+			tags: [],
+			enrollments: [{ course: 'c1', course_title: 'Course One', progress: 50 }],
+			quiz_submissions: [],
+			avg_quiz_score: null,
+			certificates: [],
+			programs: [],
+			recent_logins: [],
+		}
+
+		it('switches to Courses and shows only that slice of the data', async () => {
+			const router = makeRouter()
+			await router.push(`/users/${MEMBER}`)
+			lookup.data = { name: MEMBER, full_name: 'Jane Doe', roles: [] }
+			overview.data = overviewData
+			const wrapper = await mountDetail(router)
+
+			await wrapper.find('[data-testid="tab-Courses"]').trigger('click')
+			await flushPromises()
+
+			expect(wrapper.find('[data-testid="member-courses"]').text()).toContain(
+				'Course One'
+			)
+			expect(wrapper.find('[data-testid="member-overview"]').exists()).toBe(false)
+		})
+
+		it('shows the empty state for a tab with nothing in it', async () => {
+			const router = makeRouter()
+			await router.push(`/users/${MEMBER}`)
+			lookup.data = { name: MEMBER, full_name: 'Jane Doe', roles: [] }
+			overview.data = overviewData
+			const wrapper = await mountDetail(router)
+
+			await wrapper.find('[data-testid="tab-Certificates"]').trigger('click')
+			await flushPromises()
+
+			expect(wrapper.find('[data-testid="member-certificates"]').text()).toContain(
+				'No certificates yet.'
+			)
+		})
+
+		it('only fetches the overview data once across every tab switch', async () => {
+			const router = makeRouter()
+			await router.push(`/users/${MEMBER}`)
+			lookup.data = { name: MEMBER, full_name: 'Jane Doe', roles: [] }
+			const wrapper = await mountDetail(router)
+			// Landing on Overview already triggered the one fetch this test
+			// guards; a real fetch would resolve into overviewFetch.data — the
+			// mock doesn't, so it's set by hand once here to unblock the
+			// tabs below, the way the earlier response would have.
+			expect(overview.fetch).toHaveBeenCalledTimes(1)
+			overview.data = overviewData
+			await flushPromises()
+
+			await wrapper.find('[data-testid="tab-Courses"]').trigger('click')
+			await wrapper.find('[data-testid="tab-Quizzes"]').trigger('click')
+			await wrapper.find('[data-testid="tab-Activity"]').trigger('click')
+			await flushPromises()
+
+			expect(overview.fetch).toHaveBeenCalledTimes(1)
 		})
 	})
 })
