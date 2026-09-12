@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 
 import frappe
+import frappe.utils.password
 from frappe import _
 from frappe.utils import cint
 
@@ -179,7 +180,46 @@ def _call_gemini(prompt: str, schema: dict) -> dict:
 	return json.loads(text)
 
 
-def _call_deepseek(prompt: str, schema: dict) -> dict:
+def _example_questions(allowed_types: list[str]) -> list[dict]:
+	"""One illustrative, fully-formed example per allowed type - shown to
+	DeepSeek instead of the raw JSON Schema. A model without real structured-
+	output support tends to mimic a schema's own keys ("type", "properties")
+	back at you when the schema itself is pasted in as the instruction; a
+	concrete example of the actual data shape doesn't have that failure mode.
+	"""
+	examples = []
+	if "Choices" in allowed_types:
+		examples.append(
+			{
+				"type": "Choices",
+				"question": "Which of these is the capital of France?",
+				"multiple": False,
+				"options": [
+					{"text": "Paris", "is_correct": True, "explanation": "Paris is France's capital."},
+					{"text": "Lyon", "is_correct": False},
+					{"text": "Marseille", "is_correct": False},
+				],
+			}
+		)
+	if "User Input" in allowed_types:
+		examples.append(
+			{
+				"type": "User Input",
+				"question": "What gas do plants absorb from the air during photosynthesis?",
+				"possibilities": ["Carbon dioxide", "CO2"],
+			}
+		)
+	if "Open Ended" in allowed_types:
+		examples.append(
+			{
+				"type": "Open Ended",
+				"question": "Explain in your own words why the sky appears blue.",
+			}
+		)
+	return examples
+
+
+def _call_deepseek(prompt: str, count: int, allowed_types: list[str]) -> dict:
 	import requests
 
 	api_key = frappe.utils.password.get_decrypted_password(
@@ -189,12 +229,18 @@ def _call_deepseek(prompt: str, schema: dict) -> dict:
 		frappe.throw(_("DeepSeek API Key is not configured. Add it in LMS Settings."))
 
 	# DeepSeek's JSON mode only guarantees *valid JSON*, not schema conformance
-	# (unlike Gemini's responseSchema) - the schema is restated in-prompt as the
-	# best available steering, and _parse_ai_questions() is the real backstop.
+	# (unlike Gemini's responseSchema) - so it's steered with a concrete example
+	# of the target shape rather than the raw JSON Schema (see _example_questions).
+	example = {"questions": _example_questions(allowed_types)}
 	schema_prompt = (
 		prompt
-		+ "\n\nRespond with a single JSON object matching this shape (no prose, "
-		"no markdown fences):\n" + json.dumps(schema)
+		+ "\n\nRespond with a single JSON object shaped exactly like this "
+		"example (the example's own questions are illustrative only - write "
+		"new questions about the real topic above, do not reuse or reference "
+		f"this example's content):\n{json.dumps(example)}\n\n"
+		f'The "questions" array in your response must contain exactly {count} '
+		"question object(s) like the examples above. Output only the JSON "
+		"object itself - never the schema, instructions, or field descriptions."
 	)
 	response = requests.post(
 		"https://api.deepseek.com/chat/completions",
@@ -280,7 +326,7 @@ def generate_quiz_questions(
 	schema = _response_schema(allowed_types, count)
 
 	if provider == "deepseek":
-		raw = _call_deepseek(prompt, schema)
+		raw = _call_deepseek(prompt, count, allowed_types)
 	elif provider == "gemini":
 		raw = _call_gemini(prompt, schema)
 	else:
