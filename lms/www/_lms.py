@@ -1,4 +1,5 @@
 import re
+from urllib.parse import quote
 
 import frappe
 from bs4 import BeautifulSoup
@@ -20,7 +21,12 @@ def get_context():
 
 	app_path = frappe.form_dict.get("app_path")
 	favicon = frappe.db.get_single_value("Website Settings", "favicon") or "/assets/lms/frontend/favicon.png"
-	title = frappe.db.get_single_value("Website Settings", "app_name") or "Frappe Learning"
+	# frontend/index.html interpolates this straight into <link href="...">
+	# unescaped; an uploaded filename containing a space (or any other
+	# reserved character) then breaks the URL and the browser silently falls
+	# back to the default favicon on reload.
+	favicon = quote(favicon, safe="/:")
+	title = frappe.db.get_single_value("Website Settings", "app_name") or "Nusadaya"
 
 	context.meta = get_meta(app_path, title, favicon)
 	context.title = title
