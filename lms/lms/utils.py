@@ -3040,11 +3040,14 @@ def get_batches(
 	if not filters:
 		filters = {}
 
-	update_batch_filters(filters)
+	# Read before update_batch_filters can move `start_date` into or_filters.
+	batch_type = get_batch_type(filters)
+	or_filters = update_batch_filters(filters)
 
 	batches = frappe.get_all(
 		"LMS Batch",
 		filters=filters,
+		or_filters=or_filters,
 		fields=[
 			"name",
 			"title",
@@ -3068,19 +3071,40 @@ def get_batches(
 		page_length=resolve_page_length(limit_page_length),
 	)
 
-	batches = filter_batches_based_on_start_time(batches, filters)
+	batches = filter_batches_based_on_start_time(batches, batch_type)
 	batches = get_batch_card_details(batches)
 	return batches
 
 
-def update_batch_filters(filters: dict) -> None:
-	"""Turns the pseudo-filters the batch list offers into real ones, in place."""
+def update_batch_filters(filters: dict) -> dict:
+	"""Turns the pseudo-filters the batch list offers into real ones, in place.
+
+	Returns an `or_filters` dict for the one condition that cannot be expressed
+	as an AND alongside `filters`.
+	"""
+	or_filters = {}
+
 	if filters.get("enrolled"):
 		enrolled_batches = frappe.get_all(
 			"LMS Batch Enrollment", {"member": frappe.session.user}, pluck="batch"
 		)
 		filters.update({"name": ["in", enrolled_batches]})
 		del filters["enrolled"]
+
+	# The student/guest browse view (and staff's Upcoming tab) hide a batch once
+	# its start date passes. A batch with `always_open` never really "starts" —
+	# it keeps accepting self-enrollment indefinitely, same as get_batch_details
+	# already honours for the enrol button — so it must not vanish from the one
+	# list a student would otherwise use to find it. Moved into or_filters, not
+	# just widened in place: `filters` is ANDed as a whole, so leaving the date
+	# bound there would still exclude a past-start-date batch no matter what an
+	# OR condition said alongside it.
+	start_date_filter = filters.get("start_date")
+	if isinstance(start_date_filter, (list, tuple)) and len(start_date_filter) == 2 and ">" in start_date_filter[0]:
+		or_filters["start_date"] = filters.pop("start_date")
+		or_filters["always_open"] = 1
+
+	return or_filters
 
 
 @frappe.whitelist(allow_guest=True)  # nosemgrep: frappe-semgrep-rules.rules.security.guest-whitelisted-method
@@ -3102,10 +3126,11 @@ def get_batch_count(filters: dict = None) -> int:
 	if not filters:
 		filters = {}
 
-	update_batch_filters(filters)
-	total = count_matching("LMS Batch", filters)
-
+	# Read before update_batch_filters can move `start_date` into or_filters.
 	batch_type = get_batch_type(filters)
+	or_filters = update_batch_filters(filters)
+	total = count_matching("LMS Batch", filters, or_filters)
+
 	if batch_type:
 		total -= count_batches_the_clock_decides(filters, batch_type)
 
@@ -3125,6 +3150,12 @@ def count_batches_the_clock_decides(filters: dict, batch_type: str) -> int:
 		["start_date", "=", getdate()],
 		["start_time", started, nowtime()],
 	]
+	if batch_type == "upcoming":
+		# Mirrors filter_batches_based_on_start_time's own always_open exemption
+		# below — an always_open batch is never dropped by time-of-day alone, so
+		# it must not be subtracted from the count either, or the footer total
+		# would undercount what the list actually shows.
+		conditions.append(["always_open", "!=", 1])
 	return count_matching("LMS Batch", conditions)
 
 
@@ -3141,11 +3172,12 @@ def has_started_today(batch) -> bool:
 	return to_timedelta(str(batch.start_time)) < to_timedelta(nowtime())
 
 
-def filter_batches_based_on_start_time(batches: list, filters: dict) -> list:
-	batchType = get_batch_type(filters)
-	if batchType == "upcoming":
-		batches = [batch for batch in batches if not has_started_today(batch)]
-	elif batchType == "archived":
+def filter_batches_based_on_start_time(batches: list, batch_type: str) -> list:
+	if batch_type == "upcoming":
+		# always_open never really "starts", so time-of-day alone must not drop it
+		# the way it would an ordinary batch that began earlier today.
+		batches = [batch for batch in batches if batch.always_open or not has_started_today(batch)]
+	elif batch_type == "archived":
 		batches = [
 			batch for batch in batches if getdate(batch.start_date) != getdate() or has_started_today(batch)
 		]
