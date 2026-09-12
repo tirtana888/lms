@@ -71,6 +71,22 @@
 				/>
 				<span class="sr-only">{{ __('Locked') }}</span>
 			</template>
+			<!-- A regular (non-SCORM) chapter's own drip date, shown on the
+			collapsed header — CourseOutline.vue (the course overview page)
+			lists chapters collapsed by default, so this is the only unlock
+			info a student sees there without expanding into individual
+			lessons. -->
+			<template v-else-if="chapter.unlock_date">
+				<Tooltip :text="chapterUnlockMessage" placement="top">
+					<span
+						class="lucide-lock-keyhole size-4 text-ink-gray-4 cursor-help"
+						aria-hidden="true"
+						tabindex="0"
+						@click.stop="toast.info(chapterUnlockMessage)"
+					/>
+				</Tooltip>
+				<span class="sr-only">{{ chapterUnlockMessage }}</span>
+			</template>
 			<span
 				v-else-if="chapter.is_scorm_package && isScormChapterComplete"
 				class="lucide-check size-4 text-green-700"
@@ -95,66 +111,75 @@
 						"
 					>
 						<component
-							:is="inlineSelect || lesson.locked ? 'div' : 'router-link'"
-							:to="
-								inlineSelect || lesson.locked ? undefined : lessonRoute(lesson)
-							"
-							:class="
+							:is="lesson.locked ? Tooltip : 'div'"
+							v-bind="
 								lesson.locked
-									? 'cursor-not-allowed opacity-60'
-									: inlineSelect
-									? 'cursor-pointer'
-									: ''
+									? { text: lockMessage(lesson), placement: 'top' }
+									: {}
 							"
-							@click="onLessonClick(lesson)"
 						>
-							<div class="flex items-center text-sm leading-5 group">
-								<span
-									v-if="lesson.icon === 'icon-youtube'"
-									class="lucide-monitor-play h-4 w-4 me-2"
-								/>
-								<span
-									v-else-if="lesson.icon === 'icon-quiz'"
-									class="lucide-help-circle h-4 w-4 me-2"
-								/>
-								<span
-									v-else-if="lesson.icon === 'icon-assignment'"
-									class="lucide-notebook-pen h-4 w-4 me-2"
-								/>
-								<span
-									v-else-if="lesson.icon === 'icon-code'"
-									class="lucide-square-code h-4 w-4 me-2"
-								/>
-								<span
-									v-else-if="lesson.icon === 'icon-list'"
-									class="lucide-file-text h-4 w-4 text-ink-gray-9 me-2"
-								/>
-								{{ lesson.title }}
-								<div v-if="allowEdit" class="ms-auto flex items-center gap-2">
+							<component
+								:is="inlineSelect || lesson.locked ? 'div' : 'router-link'"
+								:to="
+									inlineSelect || lesson.locked
+										? undefined
+										: lessonRoute(lesson)
+								"
+								:class="
+									lesson.locked
+										? 'cursor-not-allowed opacity-60'
+										: inlineSelect
+										? 'cursor-pointer'
+										: ''
+								"
+								@click="onLessonClick(lesson)"
+							>
+								<div class="flex items-center text-sm leading-5 group">
 									<span
-										@click.prevent="
-											emit('delete-lesson', {
-												lesson: lesson.name,
-												chapter: chapter.name,
-											})
-										"
-										class="lucide-trash-2 h-4 w-4 text-ink-red-6 invisible group-hover:visible"
+										v-if="lesson.icon === 'icon-youtube'"
+										class="lucide-monitor-play h-4 w-4 me-2"
 									/>
-								</div>
-								<template v-if="lesson.locked">
-									<Tooltip :text="lockMessage(lesson)" placement="top">
+									<span
+										v-else-if="lesson.icon === 'icon-quiz'"
+										class="lucide-help-circle h-4 w-4 me-2"
+									/>
+									<span
+										v-else-if="lesson.icon === 'icon-assignment'"
+										class="lucide-notebook-pen h-4 w-4 me-2"
+									/>
+									<span
+										v-else-if="lesson.icon === 'icon-code'"
+										class="lucide-square-code h-4 w-4 me-2"
+									/>
+									<span
+										v-else-if="lesson.icon === 'icon-list'"
+										class="lucide-file-text h-4 w-4 text-ink-gray-9 me-2"
+									/>
+									{{ lesson.title }}
+									<div v-if="allowEdit" class="ms-auto flex items-center gap-2">
+										<span
+											@click.prevent="
+												emit('delete-lesson', {
+													lesson: lesson.name,
+													chapter: chapter.name,
+												})
+											"
+											class="lucide-trash-2 h-4 w-4 text-ink-red-6 invisible group-hover:visible"
+										/>
+									</div>
+									<template v-if="lesson.locked">
 										<span
 											class="lucide-lock-keyhole h-4 w-4 text-ink-gray-4 ms-2"
 											aria-hidden="true"
 										/>
-									</Tooltip>
-									<span class="sr-only">{{ lockMessage(lesson) }}</span>
-								</template>
-								<span
-									v-else-if="lesson.is_complete"
-									class="lucide-check h-4 w-4 text-green-700 ms-2"
-								/>
-							</div>
+										<span class="sr-only">{{ lockMessage(lesson) }}</span>
+									</template>
+									<span
+										v-else-if="lesson.is_complete"
+										class="lucide-check h-4 w-4 text-green-700 ms-2"
+									/>
+								</div>
+							</component>
 						</component>
 					</div>
 				</template>
@@ -307,6 +332,14 @@ function lockMessage(lesson: OutlineLesson): string {
 	return __('Complete the previous lesson to unlock this one')
 }
 
+// Same wording, for the chapter-level lock shown on the collapsed header
+// (see chapter.unlock_date in build_outline).
+const chapterUnlockMessage = computed<string>(() =>
+	props.chapter.unlock_date
+		? __('Unlocks on {0}').format(dayjs(props.chapter.unlock_date).format('D MMM YYYY'))
+		: __('Complete the previous chapter to unlock this one')
+)
+
 // Admins (editorLinks) deep-link into the in-page editor; everyone else
 // opens the student view.
 function lessonRoute(lesson: OutlineLesson): RouteLocationRaw {
@@ -326,7 +359,12 @@ function lessonRoute(lesson: OutlineLesson): RouteLocationRaw {
 }
 
 function onLessonClick(lesson: OutlineLesson) {
-	if (lesson.locked) return
+	if (lesson.locked) {
+		// Tooltip only shows on hover, so tapping is the only signal touch/PWA
+		// users get — surface the same message as a toast there.
+		toast.info(lockMessage(lesson))
+		return
+	}
 	if (!props.inlineSelect) return
 	emit('select-lesson', {
 		chapterNumber: lesson.number.split('-')[0],

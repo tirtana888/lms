@@ -48,67 +48,87 @@
 						>
 							{{ chapter.lessons.length }}
 						</span>
+						<!-- Same chapter-level drip date shown collapsed on the course
+						overview page (ChapterRow.vue) — kept consistent here since this
+						sidebar also renders other chapters collapsed while reading. -->
+						<template v-if="chapter.unlock_date">
+							<Tooltip :text="chapterUnlockMessage(chapter)" placement="top">
+								<LockKeyhole
+									class="size-4 stroke-1.5 shrink-0 text-ink-gray-4 cursor-help"
+									aria-hidden="true"
+									@click.stop="toast.info(chapterUnlockMessage(chapter))"
+								/>
+							</Tooltip>
+							<span class="sr-only">{{ chapterUnlockMessage(chapter) }}</span>
+						</template>
 					</DisclosureButton>
 					<DisclosurePanel>
 						<ul class="list-none">
 							<li v-for="lesson in chapter.lessons || []" :key="lesson.name">
 								<component
-									:is="
+									:is="lesson.locked ? Tooltip : 'div'"
+									v-bind="
 										lesson.locked
-											? 'div'
-											: inlineSelect
-											? 'button'
-											: 'router-link'
+											? { text: lockMessage(lesson), placement: 'top' }
+											: {}
 									"
-									:type="!lesson.locked && inlineSelect ? 'button' : undefined"
-									:to="
-										lesson.locked || inlineSelect
-											? undefined
-											: {
-													name: 'Lesson',
-													params: {
-														courseName,
-														chapterNumber: lesson.number.split('-')[0],
-														lessonNumber: lesson.number.split('-')[1],
-													},
-													query: studentViewQuery,
-											  }
-									"
-									class="flex w-full items-center gap-3 rounded ps-9 pe-3 py-2 text-start text-sm leading-5 text-ink-gray-8 hover:bg-surface-gray-2"
-									:class="[
-										lesson.locked
-											? 'cursor-not-allowed opacity-60'
-											: inlineSelect
-											? 'cursor-pointer'
-											: '',
-										isActive(lesson.number)
-											? 'bg-surface-gray-2 text-ink-gray-9'
-											: '',
-									]"
-									@click="onLessonClick(lesson)"
 								>
 									<component
-										:is="iconFor(lesson.icon)"
-										class="size-4 stroke-1.5 shrink-0 text-ink-gray-7"
-									/>
-									<span class="truncate flex-1">{{ lesson.title }}</span>
-									<template v-if="lesson.locked">
-										<Tooltip :text="lockMessage(lesson)" placement="top">
+										:is="
+											lesson.locked
+												? 'div'
+												: inlineSelect
+												? 'button'
+												: 'router-link'
+										"
+										:type="!lesson.locked && inlineSelect ? 'button' : undefined"
+										:to="
+											lesson.locked || inlineSelect
+												? undefined
+												: {
+														name: 'Lesson',
+														params: {
+															courseName,
+															chapterNumber: lesson.number.split('-')[0],
+															lessonNumber: lesson.number.split('-')[1],
+														},
+														query: studentViewQuery,
+												  }
+										"
+										class="flex w-full items-center gap-3 rounded ps-9 pe-3 py-2 text-start text-sm leading-5 text-ink-gray-8 hover:bg-surface-gray-2"
+										:class="[
+											lesson.locked
+												? 'cursor-not-allowed opacity-60'
+												: inlineSelect
+												? 'cursor-pointer'
+												: '',
+											isActive(lesson.number)
+												? 'bg-surface-gray-2 text-ink-gray-9'
+												: '',
+										]"
+										@click="onLessonClick(lesson)"
+									>
+										<component
+											:is="iconFor(lesson.icon)"
+											class="size-4 stroke-1.5 shrink-0 text-ink-gray-7"
+										/>
+										<span class="truncate flex-1">{{ lesson.title }}</span>
+										<template v-if="lesson.locked">
 											<LockKeyhole
 												class="size-4 stroke-1.5 shrink-0 text-ink-gray-4"
 												aria-hidden="true"
 											/>
-										</Tooltip>
-										<span class="sr-only">{{ lockMessage(lesson) }}</span>
-									</template>
-									<CircleCheck
-										v-else-if="lesson.is_complete"
-										class="size-4 stroke-1.5 shrink-0 text-green-700 fill-none"
-									/>
-									<Circle
-										v-else
-										class="size-4 stroke-1.5 shrink-0 text-ink-gray-4"
-									/>
+											<span class="sr-only">{{ lockMessage(lesson) }}</span>
+										</template>
+										<CircleCheck
+											v-else-if="lesson.is_complete"
+											class="size-4 stroke-1.5 shrink-0 text-green-700 fill-none"
+										/>
+										<Circle
+											v-else
+											class="size-4 stroke-1.5 shrink-0 text-ink-gray-4"
+										/>
+									</component>
 								</component>
 							</li>
 						</ul>
@@ -122,7 +142,7 @@
 <script setup>
 import { computed, watch, watchEffect } from 'vue'
 import { useRoute } from 'vue-router'
-import { createResource, Tooltip } from 'frappe-ui'
+import { createResource, toast, Tooltip } from 'frappe-ui'
 import { Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/vue'
 import dayjs from '@/utils/dayjs'
 import {
@@ -227,8 +247,20 @@ function lockMessage(lesson) {
 	return __('Complete the previous lesson to unlock this one')
 }
 
+function chapterUnlockMessage(chapter) {
+	if (chapter.unlock_date) {
+		return __('Unlocks on {0}').format(dayjs(chapter.unlock_date).format('D MMM YYYY'))
+	}
+	return __('Complete the previous chapter to unlock this one')
+}
+
 function onLessonClick(lesson) {
-	if (lesson.locked) return
+	if (lesson.locked) {
+		// Tooltip only shows on hover, so tapping is the only signal touch/PWA
+		// users get — surface the same message as a toast there.
+		toast.info(lockMessage(lesson))
+		return
+	}
 	emit('select-lesson', {
 		chapterNumber: lesson.number.split('-')[0],
 		lessonNumber: lesson.number.split('-')[1],

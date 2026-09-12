@@ -1527,6 +1527,11 @@ def build_outline(
 			scorm_package=c.scorm_package,
 			idx=c.idx,
 			lessons=lessons,
+			# Same date already resolved per-lesson above — repeated here so a
+			# collapsed chapter can say when it opens without the student
+			# expanding it first (the Course Overview page shows chapters
+			# collapsed by default).
+			unlock_date=drip_locked_chapters.get(c.name),
 		)
 		# launch_file is the SCORM entry URL and scorm_package resolves to the package
 		# file. Handing either out for a chapter the student cannot open yet would let
