@@ -19,6 +19,7 @@ ordering) exists in the schema, so the prompt is instructed accordingly.
 from __future__ import annotations
 
 import json
+import random
 
 import frappe
 import frappe.utils.password
@@ -282,6 +283,10 @@ def _to_draft(raw_question: dict, allowed_types: list[str]) -> dict | None:
 		options = options[:MAX_OPTIONS]
 		if len(options) < 2 or not any(o.get("is_correct") for o in options):
 			return None
+		# Models reliably put the correct option first (or in some other fixed
+		# pattern) unless told otherwise, and they're bad at randomizing their
+		# own output even when asked - so the position is shuffled here instead.
+		random.shuffle(options)
 		draft["multiple"] = 1 if sum(1 for o in options if o.get("is_correct")) > 1 else 0
 		for i, option in enumerate(options, start=1):
 			draft[f"option_{i}"] = option.get("text", "").strip()
