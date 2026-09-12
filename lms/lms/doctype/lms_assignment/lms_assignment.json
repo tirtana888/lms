@@ -18,6 +18,11 @@
   "section_break_sjti",
   "show_answer",
   "answer",
+  "section_break_schedule",
+  "enable_scheduling",
+  "schedule_start",
+  "column_break_schedule",
+  "schedule_end",
   "drip_section",
   "drip_type",
   "drip_date",
@@ -81,6 +86,34 @@
    "fieldtype": "Link",
    "label": "Course",
    "options": "LMS Course"
+  },
+  {
+   "fieldname": "section_break_schedule",
+   "fieldtype": "Section Break",
+   "label": "Scheduling"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_scheduling",
+   "fieldtype": "Check",
+   "label": "Enable Scheduling"
+  },
+  {
+   "depends_on": "enable_scheduling",
+   "fieldname": "schedule_start",
+   "fieldtype": "Datetime",
+   "label": "Schedule Start",
+   "mandatory_depends_on": "enable_scheduling"
+  },
+  {
+   "fieldname": "column_break_schedule",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "enable_scheduling",
+   "fieldname": "schedule_end",
+   "fieldtype": "Datetime",
+   "label": "Schedule End"
   },
   {
    "depends_on": "course",

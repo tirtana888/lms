@@ -118,6 +118,9 @@ vi.mock('@/components/Controls/Link.vue', () => ({
 		template: `<label>{{ label }}<input data-testid="assignment-course" :value="modelValue" /></label>`,
 	},
 }))
+vi.mock('@/components/Controls/BooleanSwitch.vue', () => ({
+	default: { props: ['modelValue', 'label'], template: `<div />` },
+}))
 
 import AssignmentForm from '@/pages/Forms/AssignmentForm.vue'
 
