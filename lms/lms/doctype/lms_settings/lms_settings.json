@@ -16,6 +16,10 @@
 		"demo_data_present",
 		"column_break_bjis",
 		"unsplash_access_key",
+		"ai_quiz_section",
+		"gemini_api_key",
+		"column_break_aiquiz",
+		"deepseek_api_key",
 		"livecode_url",
 		"notifications_section",
 		"send_notification_for_published_courses",
@@ -277,6 +281,28 @@
 			"fieldname": "unsplash_access_key",
 			"fieldtype": "Data",
 			"label": "Unsplash Access Key"
+		},
+		{
+			"collapsible": 1,
+			"fieldname": "ai_quiz_section",
+			"fieldtype": "Section Break",
+			"label": "AI Quiz Generation"
+		},
+		{
+			"description": "Used by \"Generate with AI\" on the quiz question editor. Get a key from Google AI Studio (ai.google.dev).",
+			"fieldname": "gemini_api_key",
+			"fieldtype": "Password",
+			"label": "Gemini API Key"
+		},
+		{
+			"fieldname": "column_break_aiquiz",
+			"fieldtype": "Column Break"
+		},
+		{
+			"description": "Get a key from platform.deepseek.com.",
+			"fieldname": "deepseek_api_key",
+			"fieldtype": "Password",
+			"label": "DeepSeek API Key"
 		},
 		{
 			"fieldname": "sidebar_tab",

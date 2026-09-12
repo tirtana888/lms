@@ -86,6 +86,16 @@
 							/></template>
 							{{ bankOpen ? __('Add questions') : __('Question bank') }}
 						</Button>
+						<Button
+							variant="subtle"
+							:disabled="isNew || bankOpen"
+							@click="openAiDialog"
+						>
+							<template #prefix
+								><span class="lucide-sparkles size-4"
+							/></template>
+							{{ __('Generate with AI') }}
+						</Button>
 					</div>
 				</div>
 
@@ -396,6 +406,75 @@
 			</div>
 		</div>
 	</div>
+
+	<Dialog
+		v-model:open="showAiDialog"
+		:title="__('Generate Questions with AI')"
+		:actions="[
+			{
+				label: __('Generate'),
+				variant: 'solid',
+				disabled: !aiTopic.trim() || aiGenerating,
+				loading: aiGenerating,
+				onClick: () => generateWithAi(),
+			},
+		]"
+	>
+		<template #default>
+			<div class="space-y-4">
+				<FormControl
+					type="textarea"
+					v-model="aiTopic"
+					:label="__('Topic / goal')"
+					:placeholder="
+						__('e.g. Front office check-in procedures for hotel guests')
+					"
+				/>
+				<div class="flex gap-4">
+					<FormControl
+						type="number"
+						v-model="aiCount"
+						:label="__('Number of questions')"
+						class="w-40"
+					/>
+					<FormControl
+						type="select"
+						v-model="aiProvider"
+						:label="__('AI provider')"
+						:options="[
+							{ label: 'Gemini', value: 'gemini' },
+							{ label: 'DeepSeek', value: 'deepseek' },
+						]"
+						class="w-40"
+					/>
+				</div>
+				<div class="space-y-2">
+					<div class="text-p-sm text-ink-gray-6">{{ __('Question types') }}</div>
+					<BooleanSwitch v-model="aiTypes.choices" size="sm" :label="__('Choices')" />
+					<BooleanSwitch
+						v-model="aiTypes.userInput"
+						size="sm"
+						:label="__('User Input')"
+					/>
+					<BooleanSwitch
+						v-model="aiTypes.openEnded"
+						size="sm"
+						:label="__('Open Ended')"
+					/>
+				</div>
+				<FormControl
+					type="textarea"
+					v-model="aiReferenceText"
+					:label="__('Reference material (optional)')"
+					:description="
+						__(
+							'Paste source material to ground the questions in. Leave empty to let the AI draw on general knowledge of the topic.'
+						)
+					"
+				/>
+			</div>
+		</template>
+	</Dialog>
 </template>
 <script setup>
 import {
@@ -408,6 +487,7 @@ import {
 	createDocumentResource,
 	Badge,
 	LoadingIndicator,
+	Dialog,
 } from 'frappe-ui'
 import BooleanSwitch from '@/components/Controls/BooleanSwitch.vue'
 import { toDatetimeLocal, fromDatetimeLocal } from '@/utils/schedule'
@@ -475,6 +555,80 @@ const draft = ref(null)
 
 // Not a sentinel. QuestionCard derives its DOM ids from row.name, so a draft needs one.
 const DRAFT_ROW_NAME = 'new-question'
+
+// AI question generation — a queue of not-yet-reviewed drafts, replayed one
+// at a time through the exact same draft/persistDraft/discardDraft mechanism
+// addBlankQuestion() already uses below, so how a single draft is
+// reviewed/saved/discarded never has to change.
+const showAiDialog = ref(false)
+const aiTopic = ref('')
+const aiCount = ref(5)
+const aiProvider = ref('gemini')
+const aiTypes = reactive({ choices: true, userInput: true, openEnded: true })
+const aiReferenceText = ref('')
+const aiGenerating = ref(false)
+const aiQueue = ref([])
+
+const openAiDialog = () => {
+	showAiDialog.value = true
+}
+
+// Pulls the next AI-proposed question into the same draft ref a manually
+// typed blank question uses, so QuestionCard treats it identically — the
+// instructor edits, saves or discards it exactly as they would any draft.
+const advanceAiQueue = () => {
+	if (!aiQueue.value.length) return
+	const next = aiQueue.value.shift()
+	draft.value = {
+		...next,
+		name: DRAFT_ROW_NAME,
+		marks: next.marks || 1,
+		multiple: next.multiple || 0,
+		question_detail: next.question,
+	}
+}
+
+const generateWithAi = async () => {
+	if (!aiTopic.value.trim() || aiGenerating.value) return
+	const types = []
+	if (aiTypes.choices) types.push('Choices')
+	if (aiTypes.userInput) types.push('User Input')
+	if (aiTypes.openEnded) types.push('Open Ended')
+	if (!types.length) {
+		toast.error(__('Select at least one question type.'))
+		return
+	}
+	aiGenerating.value = true
+	try {
+		const results = await createResource({
+			url: 'lms.lms.ai_quiz.generate_quiz_questions',
+			auto: false,
+		}).submit({
+			topic: aiTopic.value,
+			count: aiCount.value,
+			question_types: types,
+			provider: aiProvider.value,
+			reference_text: aiReferenceText.value || null,
+		})
+		aiQueue.value = results || []
+		showAiDialog.value = false
+		if (draft.value) {
+			// A manual draft is already open; queue behind it instead of
+			// clobbering unsaved typing.
+			toast.success(
+				__(
+					'{0} questions generated. Finish the current draft to review them.'
+				).format(aiQueue.value.length)
+			)
+		} else {
+			advanceAiQueue()
+		}
+	} catch (err) {
+		toast.error(err.messages?.[0] || err)
+	} finally {
+		aiGenerating.value = false
+	}
+}
 
 // Real rows only, and a Set, because closing card B must not close card A.
 const editingNames = reactive(new Set())
@@ -797,6 +951,7 @@ const persistDraft = async ({ question_doc, marks }) => {
 		)
 		// Cleared only once the insert lands, so a failure leaves the typing on screen.
 		draft.value = null
+		advanceAiQueue()
 		refreshQuestionMeta()
 	} catch (err) {
 		toast.error(err.messages?.[0] || err)
@@ -807,6 +962,7 @@ const persistDraft = async ({ question_doc, marks }) => {
 
 const discardDraft = () => {
 	draft.value = null
+	advanceAiQueue()
 }
 
 // The question set is local, so leaving throws it away. This covers in-app navigation.

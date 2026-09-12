@@ -284,7 +284,12 @@ watch(
 
 onMounted(() => {
 	if (props.draft) {
-		// A draft starts empty. Seeded option text read as real content and could be saved by accident.
+		// A manually added draft starts empty (row.question is null) - seeded option
+		// text there would read as real content and could be saved by accident. An
+		// AI-proposed draft arrives with row.question already set, so it's applied
+		// the same way an existing question loads, or its options/possibilities
+		// would never reach the editor at all.
+		if (props.row.question) applyDoc(props.row, { marks: props.row.marks ?? 1 })
 		loaded.value = true // enables the answer editor; persistence is gated separately
 		nextTick(() => editorRef.value?.focus())
 	}
