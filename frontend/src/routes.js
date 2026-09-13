@@ -154,6 +154,11 @@ export const routes = [
 		component: () => import('@/pages/Statistics.vue'),
 	},
 	{
+		path: '/gradebook',
+		name: 'Gradebook',
+		component: () => import('@/pages/Gradebook.vue'),
+	},
+	{
 		path: '/user/:username',
 		name: 'Profile',
 		component: () => import('@/pages/Profile.vue'),

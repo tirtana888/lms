@@ -653,6 +653,21 @@ const getSidebarItems = (forMobile = false) => {
 						'ProgrammingExerciseSubmission',
 					],
 				},
+				{
+					label: 'Gradebook',
+					icon: 'ClipboardList',
+					to: 'Gradebook',
+					condition: () => {
+						// isAdmin() covers instructor/moderator/evaluator; a System
+						// Manager account doesn't necessarily also carry one of those
+						// LMS roles, so it's checked separately here.
+						return (
+							!forMobile &&
+							(isAdmin() || userResource?.data?.is_system_manager)
+						)
+					},
+					activeFor: ['Gradebook'],
+				},
 			],
 		},
 	]

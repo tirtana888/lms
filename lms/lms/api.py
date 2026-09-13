@@ -1172,6 +1172,89 @@ def attach_batches(members: list) -> None:
 		member.batches = batches_by_member.get(member.name, [])
 
 
+def _can_view_gradebook(course: str = None, batch: str = None) -> bool:
+	"""Instructor of the specific course/batch, Moderator (any), or System
+	Manager (any) - matches can_modify_course/can_modify_batch's own role
+	split, plus System Manager explicitly (neither of those two checks it,
+	and a System Manager account doesn't necessarily also carry the
+	Moderator role)."""
+	if "System Manager" in frappe.get_roles():
+		return True
+	if course:
+		return can_modify_course(course)
+	if batch:
+		return can_modify_batch(batch)
+	return False
+
+
+@frappe.whitelist()
+def get_gradebook(course: str = None, batch: str = None):
+	"""Every enrolled member x every quiz/assignment, as one grid - scoped to
+	a single course, or to a batch (every course the batch bundles, every
+	member enrolled in the batch). Nothing here is new tracking: quizzes/
+	assignments already carry their own `course` link, and submissions
+	already carry `member` - this only assembles what already exists into
+	the shape a grade grid needs, the same "no new tracking" spirit as
+	get_member_overview.
+	"""
+	if not course and not batch:
+		frappe.throw(_("Provide a course or a batch."))
+	if not _can_view_gradebook(course, batch):
+		frappe.throw(_("You are not permitted to view this gradebook."), frappe.PermissionError)
+
+	if batch:
+		courses = frappe.get_all("Batch Course", {"parent": batch}, pluck="course")
+		members = frappe.get_all(
+			"LMS Batch Enrollment", {"batch": batch}, ["member", "member_name"], order_by="member_name"
+		)
+	else:
+		courses = [course]
+		members = frappe.get_all(
+			"LMS Enrollment", {"course": course}, ["member", "member_name"], order_by="member_name"
+		)
+
+	quizzes = frappe.get_all(
+		"LMS Quiz", {"course": ["in", courses or [""]]}, ["name", "title", "course"], order_by="title"
+	)
+	assignments = frappe.get_all(
+		"LMS Assignment", {"course": ["in", courses or [""]]}, ["name", "title", "course"], order_by="title"
+	)
+
+	member_names = [m.member for m in members]
+	quiz_names = [q.name for q in quizzes]
+	assignment_names = [a.name for a in assignments]
+
+	# Ordered newest-first so the first occurrence kept per (member, quiz/
+	# assignment) below is always that pair's latest attempt.
+	quiz_subs = frappe.get_all(
+		"LMS Quiz Submission",
+		{"member": ["in", member_names or [""]], "quiz": ["in", quiz_names or [""]]},
+		["name", "member", "quiz", "percentage", "passing_percentage", "creation"],
+		order_by="creation desc",
+	)
+	assignment_subs = frappe.get_all(
+		"LMS Assignment Submission",
+		{"member": ["in", member_names or [""]], "assignment": ["in", assignment_names or [""]]},
+		["name", "member", "assignment", "status", "creation"],
+		order_by="creation desc",
+	)
+
+	latest_quiz = {}
+	for sub in quiz_subs:
+		latest_quiz.setdefault((sub.member, sub.quiz), sub)
+	latest_assignment = {}
+	for sub in assignment_subs:
+		latest_assignment.setdefault((sub.member, sub.assignment), sub)
+
+	return {
+		"quizzes": quizzes,
+		"assignments": assignments,
+		"members": members,
+		"quiz_results": list(latest_quiz.values()),
+		"assignment_results": list(latest_assignment.values()),
+	}
+
+
 @frappe.whitelist()
 def get_my_grades():
 	"""The calling user's own quiz/assignment results and certificates, across

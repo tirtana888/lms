@@ -46,6 +46,15 @@
 						{{ __('Students') }}
 					</h2>
 					<div class="flex items-center gap-x-2">
+						<router-link
+							:to="{ name: 'Gradebook', query: { batch: batch?.data?.name } }"
+						>
+							<Button variant="outline" :label="__('View Gradebook')">
+								<template #prefix>
+									<span class="lucide-clipboard-list size-4" />
+								</template>
+							</Button>
+						</router-link>
 						<FormControl
 							v-model="searchFilter"
 							:placeholder="__('Search')"
