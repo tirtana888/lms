@@ -217,7 +217,7 @@ const coverImage = createResource({
 
 const setActiveTab = () => {
 	let fragments = route.path.split('/')
-	let sections = ['certificates', 'roles', 'slots', 'schedule']
+	let sections = ['certificates', 'grades', 'roles', 'slots', 'schedule']
 	sections.forEach((section) => {
 		if (fragments.includes(section)) {
 			activeTab.value = convertToTitleCase(section)
@@ -234,6 +234,7 @@ watchEffect(() => {
 	let target = {
 		About: { name: 'ProfileAbout' },
 		Certificates: { name: 'ProfileCertificates' },
+		Grades: { name: 'ProfileGrades' },
 		Roles: { name: 'ProfileRoles' },
 		Slots: { name: 'ProfileEvaluator' },
 		Schedule: { name: 'ProfileEvaluationSchedule' },
@@ -275,6 +276,13 @@ const getTabButtons = () => {
 		{ label: __('About'), value: 'About' },
 		{ label: __('Certificates'), value: 'Certificates' },
 	]
+	// Self-only: get_my_grades() is scoped to the caller's own session
+	// regardless of which profile this renders under, so showing it on
+	// someone else's profile would just be a confusing dead end, not a
+	// data leak - still, no reason to offer it there.
+	if (isSessionUser()) {
+		buttons.push({ label: __('Grades'), value: 'Grades' })
+	}
 	if ($user.data?.is_moderator) {
 		buttons.push({ label: __('Roles'), value: 'Roles' })
 	}

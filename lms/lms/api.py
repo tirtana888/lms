@@ -1173,6 +1173,51 @@ def attach_batches(members: list) -> None:
 
 
 @frappe.whitelist()
+def get_my_grades():
+	"""The calling user's own quiz/assignment results and certificates, across
+	every course - never accepts a member argument, so unlike
+	get_member_overview this needs no role gate: it can only ever return the
+	caller's own data, whoever calls it.
+	"""
+	member = frappe.session.user
+	if member in ("Administrator", "Guest"):
+		frappe.throw(_("Invalid member."), frappe.ValidationError)
+
+	quiz_submissions = frappe.get_all(
+		"LMS Quiz Submission",
+		{"member": member},
+		["name", "quiz", "quiz_title", "course", "percentage", "passing_percentage", "creation"],
+		order_by="creation desc",
+	)
+	assignment_submissions = frappe.get_all(
+		"LMS Assignment Submission",
+		{"member": member},
+		["name", "assignment", "assignment_title", "course", "status", "creation"],
+		order_by="creation desc",
+	)
+	certificates = frappe.get_all(
+		"LMS Certificate", {"member": member}, ["course", "issue_date"], order_by="issue_date desc"
+	)
+
+	course_names = {
+		row.course for row in quiz_submissions + assignment_submissions + certificates if row.course
+	}
+	titles = frappe.get_all("LMS Course", {"name": ["in", list(course_names) or [""]]}, ["name", "title"])
+	title_by_course = {row.name: row.title for row in titles}
+	for row in quiz_submissions + assignment_submissions + certificates:
+		row.course_title = title_by_course.get(row.course, row.course)
+
+	scored = [row.percentage for row in quiz_submissions if row.percentage is not None]
+
+	return {
+		"quiz_submissions": quiz_submissions,
+		"assignment_submissions": assignment_submissions,
+		"avg_quiz_score": round(sum(scored) / len(scored), 2) if scored else None,
+		"certificates": certificates,
+	}
+
+
+@frappe.whitelist()
 def get_member_overview(member: str):
 	"""Consolidated read-only snapshot for the member detail view.
 

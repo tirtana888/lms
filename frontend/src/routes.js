@@ -171,6 +171,11 @@ export const routes = [
 				component: () => import('@/pages/ProfileCertificates.vue'),
 			},
 			{
+				name: 'ProfileGrades',
+				path: 'grades',
+				component: () => import('@/pages/ProfileGrades.vue'),
+			},
+			{
 				name: 'ProfileRoles',
 				path: 'roles',
 				component: () => import('@/pages/ProfileRoles.vue'),
