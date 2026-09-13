@@ -53,12 +53,21 @@ su frappe -c "bench set-config -g redis_socketio '$REDIS_QUEUE'"
 
 if [ ! -d "sites/$SITE_NAME" ]; then
   echo "Site $SITE_NAME belum ada, membuat baru..."
+  # --no-mariadb-socket is deprecated and, on this Frappe version, no longer
+  # grants the new DB user a wildcard host scope - the user ends up scoped to
+  # whatever container IP happened to be current at creation time, and every
+  # later restart (a new IP, since Railway containers don't keep one) then
+  # fails migrate with "Access denied ... (using password: YES)". The
+  # deprecation warning's own suggested replacement actually grants '%'
+  # (any host), which is what a container whose IP can change on every
+  # restart genuinely needs. Only touches the create-a-new-site path - an
+  # already-existing site (the migrate branch below) never re-runs this.
   su frappe -c "bench new-site '$SITE_NAME' \
     --db-host '$DB_HOST' \
     --db-port '${DB_PORT:-3306}' \
     --mariadb-root-password '$MYSQL_ROOT_PASSWORD' \
     --admin-password '$ADMIN_PASSWORD' \
-    --no-mariadb-socket \
+    --mariadb-user-host-login-scope='%' \
     --install-app lms"
 else
   echo "Site $SITE_NAME sudah ada, jalankan bench migrate untuk sinkronkan schema..."
