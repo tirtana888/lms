@@ -1256,6 +1256,42 @@ def get_gradebook(course: str = None, batch: str = None):
 
 
 @frappe.whitelist()
+def update_quiz_score(submission: str, percentage):
+	"""Override a quiz submission's score from the Gradebook. Writes straight
+	to LMS Quiz Submission - the one record every other view (the student's
+	own "My Grades", the submission's own detail page) already reads from -
+	so nothing separate needs to be kept in sync.
+
+	Gated per-submission (not once for the whole page) via the same
+	can_modify_course check get_gradebook uses: an instructor only permitted
+	on some of a batch's courses can still view the whole batch's grid, but
+	editing a course they don't teach is refused right here.
+	"""
+	# percentage and score are both Int fields on LMS Quiz Submission (marks
+	# are whole numbers) - cint, not flt, so the recomputed score below
+	# doesn't silently pick up a fraction the column would round on its own.
+	percentage = cint(percentage)
+	if percentage < 0 or percentage > 100:
+		frappe.throw(_("Score must be between 0 and 100."))
+
+	submission_doc = frappe.db.get_value(
+		"LMS Quiz Submission", submission, ["course", "score_out_of"], as_dict=True
+	)
+	if not submission_doc:
+		frappe.throw(_("Submission not found."), frappe.DoesNotExistError)
+
+	if "System Manager" not in frappe.get_roles() and not can_modify_course(submission_doc.course):
+		frappe.throw(_("You are not permitted to edit this score."), frappe.PermissionError)
+
+	values = {"percentage": percentage}
+	if submission_doc.score_out_of:
+		values["score"] = round(percentage / 100 * submission_doc.score_out_of)
+
+	frappe.db.set_value("LMS Quiz Submission", submission, values)
+	return values
+
+
+@frappe.whitelist()
 def get_my_grades():
 	"""The calling user's own quiz/assignment results and certificates, across
 	every course - never accepts a member argument, so unlike
