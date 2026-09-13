@@ -16,11 +16,6 @@ export const routes = [
 		component: () => import('@/pages/Dashboard.vue'),
 	},
 	{
-		path: '/overview',
-		name: 'Overview',
-		component: () => import('@/pages/Overview.vue'),
-	},
-	{
 		path: '/courses',
 		name: 'Courses',
 		component: () => import('@/pages/Courses/Courses.vue'),

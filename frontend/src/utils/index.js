@@ -520,15 +520,6 @@ const getSidebarItems = (forMobile = false) => {
 					},
 				},
 				{
-					label: 'Overview',
-					icon: 'LayoutList',
-					to: 'Overview',
-					activeFor: ['Overview'],
-					condition: () => {
-						return isAdmin()
-					},
-				},
-				{
 					label: 'Search',
 					icon: 'Search',
 					action: 'commandPalette',

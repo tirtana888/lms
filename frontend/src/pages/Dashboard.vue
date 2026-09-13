@@ -1,7 +1,17 @@
 <template>
 	<div>
 		<PageHeader :title="__('Dashboard')" />
-		<div class="p-5 space-y-5">
+		<div class="px-5 pt-4">
+			<TabButtons
+				:options="[
+					{ label: __('Dashboard'), value: 'dashboard' },
+					{ label: __('Overview'), value: 'overview' },
+				]"
+				v-model="activeTab"
+			/>
+		</div>
+
+		<div v-if="activeTab === 'dashboard'" class="p-5 space-y-5">
 			<div class="border rounded-lg overflow-hidden">
 				<div class="p-4 border-b flex items-center gap-2">
 					<span class="lucide-school size-4 text-ink-gray-6" />
@@ -186,6 +196,29 @@
 				</div>
 			</div>
 		</div>
+
+		<div v-else class="w-full p-5">
+			<div class="space-y-2">
+				<h1 class="text-2xl-bold text-ink-gray-9">
+					{{ __('Hey') }}, {{ user.data?.full_name }} 👋
+				</h1>
+				<div class="text-lg text-ink-gray-6 leading-6">
+					{{ overviewSubtitle }}
+				</div>
+			</div>
+
+			<div
+				v-if="isOverviewLoading"
+				class="flex flex-1 items-center justify-center py-20"
+			>
+				<LoadingIndicator class="size-5 text-ink-gray-5" />
+			</div>
+			<AdminHome
+				v-else
+				:liveClasses="adminLiveClasses"
+				:evals="adminEvals"
+			/>
+		</div>
 	</div>
 </template>
 <script setup>
@@ -196,14 +229,19 @@ import {
 	FormControl,
 	LoadingIndicator,
 	NumberChart,
+	TabButtons,
 	usePageMeta,
 } from 'frappe-ui'
-import { inject, ref, watch } from 'vue'
+import { computed, inject, ref, watch } from 'vue'
 import PageHeader from '@/components/Layouts/PageHeader.vue'
+import AdminHome from '@/pages/Home/AdminHome.vue'
 import { sessionStore } from '@/stores/session'
 
 const { brand } = sessionStore()
 const dayjs = inject('$dayjs')
+const user = inject('$user')
+
+const activeTab = ref('dashboard')
 
 const range = ref('7')
 const rangeOptions = [
@@ -247,6 +285,52 @@ watch(range, () => {
 		},
 	})
 	signupsChart.reload()
+})
+
+// The "Overview" tab: the same content this page used to show admins
+// directly before Dashboard existed - unchanged, just folded in as a second
+// tab here instead of AdminHome.vue's own separate route.
+const adminLiveClasses = createResource({
+	url: 'lms.lms.api.get_admin_live_classes',
+	auto: true,
+})
+
+const adminEvals = createResource({
+	url: 'lms.lms.api.get_admin_evals',
+	auto: true,
+})
+
+const isOverviewLoading = computed(() => {
+	return (
+		(adminLiveClasses.loading && !adminLiveClasses.data) ||
+		(adminEvals.loading && !adminEvals.data)
+	)
+})
+
+const overviewSubtitle = computed(() => {
+	let liveClassSuffix =
+		adminLiveClasses.data?.length > 1 ? __('live classes') : __('live class')
+	let evalSuffix =
+		adminEvals.data?.length > 1 ? __('evaluations') : __('evaluation')
+	if (adminLiveClasses.data?.length > 0 && adminEvals.data?.length > 0) {
+		return __('You have {0} upcoming {1} and {2} {3} scheduled.').format(
+			adminLiveClasses.data.length,
+			liveClassSuffix,
+			adminEvals.data.length,
+			evalSuffix
+		)
+	} else if (adminLiveClasses.data?.length > 0) {
+		return __('You have {0} upcoming {1}.').format(
+			adminLiveClasses.data.length,
+			liveClassSuffix
+		)
+	} else if (adminEvals.data?.length > 0) {
+		return __('You have {0} {1} scheduled.').format(
+			adminEvals.data.length,
+			evalSuffix
+		)
+	}
+	return __('Manage your courses and batches at a glance')
 })
 
 usePageMeta(() => {
