@@ -118,6 +118,19 @@ const { brand } = sessionStore()
 const router = useRouter()
 
 onMounted(() => {
+	// Role-based default tab, before setFiltersFromQuery() so an explicit
+	// ?tab= query param still wins - a student's own courses are their
+	// enrolled ones, not the public catalog, and an admin role's day-to-day
+	// work is on unpublished/draft courses, not the already-published ones.
+	if (user.data?.is_student) {
+		currentTab.value = 'enrolled'
+	} else if (
+		user.data?.is_moderator ||
+		user.data?.is_instructor ||
+		user.data?.is_evaluator
+	) {
+		currentTab.value = 'unpublished'
+	}
 	setFiltersFromQuery()
 	updateCourses()
 })
