@@ -84,19 +84,27 @@
 					{{ __('Feel free to make edits to your submission if needed.') }}
 				</div>
 				<div
-					v-if="showUploader() && canModifyAssignment && !scheduleBlocked"
+					v-if="
+						showUploader() &&
+						(canModifyAssignment || (canGradeSubmission && attachment))
+					"
 					class="border rounded-lg p-3"
 				>
-					<div class="font-semibold mb-2">
-						{{ __('Upload Assignment') }}
-					</div>
-					<div class="text-ink-gray-5 text-sm mt-1 mb-4">
-						{{
-							__('You can only upload {0} files').format(assignment.data.type)
-						}}
+					<template v-if="canModifyAssignment">
+						<div class="font-semibold mb-2">
+							{{ __('Upload Assignment') }}
+						</div>
+						<div class="text-ink-gray-5 text-sm mt-1 mb-4">
+							{{
+								__('You can only upload {0} files').format(assignment.data.type)
+							}}
+						</div>
+					</template>
+					<div v-else class="font-semibold mb-2">
+						{{ __('Submitted File') }}
 					</div>
 					<FileUploader
-						v-if="!attachment"
+						v-if="!attachment && canModifyAssignment"
 						:fileTypes="getType()"
 						:uploadArgs="{
 							private: true,
