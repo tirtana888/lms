@@ -50,35 +50,59 @@
 					<span class="truncate text-p-xs text-ink-gray-5">{{ row.name }}</span>
 				</div>
 			</router-link>
-			<div v-else-if="column.key === 'roles'" class="flex flex-wrap gap-1">
+			<div v-else-if="column.key === 'roles'" class="flex items-center gap-1">
 				<Badge
-					v-for="role in displayRoles(row)"
+					v-for="role in splitBadges(displayRoles(row)).shown"
 					:key="role"
 					theme="gray"
 					variant="subtle"
 				>
 					{{ role }}
 				</Badge>
+				<Tooltip
+					v-if="splitBadges(displayRoles(row)).hidden.length"
+					:text="splitBadges(displayRoles(row)).hidden.join(', ')"
+				>
+					<Badge theme="gray" variant="subtle">
+						+{{ splitBadges(displayRoles(row)).hidden.length }}
+					</Badge>
+				</Tooltip>
 			</div>
-			<div v-else-if="column.key === 'batches'" class="flex flex-wrap gap-1">
+			<div v-else-if="column.key === 'batches'" class="flex items-center gap-1">
 				<Badge
-					v-for="batch in row.batches || []"
+					v-for="batch in splitBadges(row.batches || []).shown"
 					:key="batch"
 					theme="green"
 					variant="subtle"
 				>
 					{{ batch }}
 				</Badge>
+				<Tooltip
+					v-if="splitBadges(row.batches || []).hidden.length"
+					:text="splitBadges(row.batches || []).hidden.join(', ')"
+				>
+					<Badge theme="green" variant="subtle">
+						+{{ splitBadges(row.batches || []).hidden.length }}
+					</Badge>
+				</Tooltip>
 			</div>
-			<div v-else-if="column.key === 'tags'" class="flex flex-wrap gap-1">
+			<div v-else-if="column.key === 'tags'" class="flex items-center gap-1">
 				<Badge
-					v-for="tag in displayTags(row)"
+					v-for="tag in splitBadges(displayTags(row)).shown"
 					:key="tag"
 					theme="blue"
 					variant="subtle"
 				>
 					{{ tag }}
 				</Badge>
+				<Tooltip
+					v-if="splitBadges(displayTags(row)).hidden.length"
+					:text="splitBadges(displayTags(row)).hidden.join(', ')"
+				>
+					<Badge theme="blue" variant="subtle">
+						+{{ splitBadges(displayTags(row)).hidden.length }}
+					</Badge>
+				</Tooltip>
 			</div>
 			<div
 				v-else-if="column.key === 'last_active' || column.key === 'creation'"
@@ -138,6 +162,7 @@ import {
 	Dropdown,
 	Select,
 	toast,
+	Tooltip,
 	usePageMeta,
 } from 'frappe-ui'
 import { inject, onMounted, ref, watch } from 'vue'
@@ -188,6 +213,15 @@ const roleLabels: Record<string, string> = {
 
 const displayRoles = (row: Member): string[] =>
 	(row.roles || []).filter((role) => roleLabels[role]).map((role) => roleLabels[role])
+
+// frappe-ui's ListView rows appear to be fixed-height, so wrapping badges
+// (2+ roles/batches/tags) overflow into the row above/below instead of
+// growing the row - capping what's shown avoids ever needing a second line.
+const BADGE_DISPLAY_LIMIT = 2
+const splitBadges = (items: string[]): { shown: string[]; hidden: string[] } => ({
+	shown: items.slice(0, BADGE_DISPLAY_LIMIT),
+	hidden: items.slice(BADGE_DISPLAY_LIMIT),
+})
 
 // Frappe stores tags as a bare comma-separated string on every doc
 // (`_user_tags`), not a child table — same parsing as get_member_overview.

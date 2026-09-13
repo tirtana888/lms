@@ -242,13 +242,13 @@ import {
 	FormControl,
 	toast,
 } from 'frappe-ui'
-import { computed, inject, onUnmounted, ref, watch } from 'vue'
+import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue'
 import ShortcutTooltip from '@/components/ShortcutTooltip.vue'
 import {
 	useKeyboardShortcuts,
 	saveShortcut,
 } from '@/composables/useKeyboardShortcuts'
-import { useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import { validateFile } from '@/utils'
 import RichTextEditor from '@/components/RichTextEditor.vue'
 import { safeUrl } from '@/utils/safeUrl'
@@ -539,6 +539,29 @@ watch(
 
 onUnmounted(() => {
 	stopScheduleClock()
+	window.removeEventListener('beforeunload', warnBeforeUnload)
+})
+
+// Nothing here autosaves - a typed answer or an uploaded-but-unsubmitted file
+// lives only in this component's memory until Submit is clicked. Without a
+// warning, leaving the page (in-app navigation or closing/refreshing the tab)
+// silently discards it, which reads to the student as the assignment having
+// been "reset". This only warns; it does not itself preserve anything.
+const warnBeforeUnload = (event) => {
+	if (!isDirty.value) return
+	event.preventDefault()
+	event.returnValue = ''
+}
+
+onMounted(() => {
+	window.addEventListener('beforeunload', warnBeforeUnload)
+})
+
+onBeforeRouteLeave(() => {
+	if (!isDirty.value) return true
+	return window.confirm(
+		__('You have unsaved changes to this assignment. Leave without saving?')
+	)
 })
 
 const submissionStatusOptions = computed(() => {
