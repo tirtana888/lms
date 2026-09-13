@@ -139,6 +139,16 @@ def can_access_quiz(quiz: str, *, user: str | None = None) -> bool:
 					quiz_row.drip_type, quiz_row.drip_date, quiz_row.drip_days, enrollment_creation, batch_start
 				):
 					continue
+
+			# An Approved extension request grants this one student the quiz back
+			# even though its chapter has since deadline-closed (or, in principle,
+			# is still drip-locked) - the reviewer already decided the student
+			# should have it, so the lock set below is not consulted at all for them.
+			from lms.lms.schedule_utils import get_active_extension
+
+			if get_active_extension(user, "LMS Quiz", quiz):
+				return True
+
 			locked = get_locked_lessons(course)
 			if not locked:
 				return True
@@ -249,6 +259,23 @@ def get_deadline_closed_chapters(course: str) -> dict:
 	if not enrollment_creation:
 		return {}
 	return compute_deadline_closed_chapters(course, enrollment_creation, batch_start)
+
+
+def get_deadline_closed_lessons(course: str) -> set:
+	"""Lesson names in ``course`` whose chapter has deadline-closed for the
+	current user - the subset of the full lock set specifically due to a
+	Chapter's own relative deadline, not drip-not-yet-open or the
+	sequential-completion gate. Used to tell a student which quiz is blocked
+	for that reason (extension-request eligible) rather than some other lock.
+	"""
+	deadline_closed_chapters = get_deadline_closed_chapters(course)
+	if not deadline_closed_chapters:
+		return set()
+
+	from lms.lms.utils import get_ordered_lesson_rows
+
+	rows = get_ordered_lesson_rows(course)
+	return {row.name for row in rows if row.chapter_name in deadline_closed_chapters}
 
 
 def _lock_state(course: str) -> tuple[set, list, set]:

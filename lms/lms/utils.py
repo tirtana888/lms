@@ -1137,6 +1137,8 @@ def get_course_fields():
 		"lessons",
 		"enrollments",
 		"rating",
+		"allow_extension_requests",
+		"max_extension_requests",
 	]
 
 

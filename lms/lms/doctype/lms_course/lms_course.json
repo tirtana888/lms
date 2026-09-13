@@ -27,6 +27,8 @@
   "require_access_code",
   "access_code",
   "enforce_lesson_completion",
+  "allow_extension_requests",
+  "max_extension_requests",
   "section_break_18",
   "short_introduction",
   "column_break_viqw",
@@ -119,6 +121,21 @@
    "fieldname": "enforce_lesson_completion",
    "fieldtype": "Check",
    "label": "Enforce Lesson Completion"
+  },
+  {
+   "default": "0",
+   "description": "Lets an enrolled student request a deadline extension on a Quiz or Assignment in this course once every chapter has opened for them, capped at Max Extension Requests per student. A Moderator, System Manager, or this course's own instructor reviews each request.",
+   "fieldname": "allow_extension_requests",
+   "fieldtype": "Check",
+   "label": "Allow Extension Requests"
+  },
+  {
+   "default": "2",
+   "depends_on": "allow_extension_requests",
+   "fieldname": "max_extension_requests",
+   "fieldtype": "Int",
+   "label": "Max Extension Requests (per student)",
+   "non_negative": 1
   },
   {
    "fieldname": "image",

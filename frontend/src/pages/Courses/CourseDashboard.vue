@@ -54,6 +54,16 @@
 								</template>
 							</Button>
 						</router-link>
+						<router-link
+							v-if="course.data?.allow_extension_requests"
+							:to="{ name: 'ExtensionRequests', query: { course: course.data?.name } }"
+						>
+							<Button variant="outline" :label="__('Extension Requests')">
+								<template #prefix>
+									<span class="lucide-clock size-4" />
+								</template>
+							</Button>
+						</router-link>
 						<FormControl
 							v-model="searchFilter"
 							:placeholder="__('Search')"

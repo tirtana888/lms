@@ -53,6 +53,26 @@
 					"
 					@update:modelValue="markDirty()"
 				/>
+				<BooleanSwitch
+					size="sm"
+					v-model="doc.allow_extension_requests"
+					:label="__('Allow Extension Requests')"
+					:description="
+						__(
+							'Once every chapter has opened for a student, they can request a deadline extension on a blocked Quiz or Assignment, up to the limit below.'
+						)
+					"
+					@update:modelValue="markDirty()"
+				/>
+				<FormControl
+					v-if="doc.allow_extension_requests"
+					v-model="doc.max_extension_requests"
+					type="number"
+					min="0"
+					:label="__('Max Extension Requests (per student)')"
+					variant="outline"
+					@input="markDirty()"
+				/>
 			</div>
 		</CollapsibleSection>
 

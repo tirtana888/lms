@@ -1,0 +1,248 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-09-13 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "member",
+  "member_name",
+  "course",
+  "course_title",
+  "column_break_ref",
+  "reference_type",
+  "reference_name",
+  "reference_title",
+  "current_deadline",
+  "section_break_request",
+  "reason_category",
+  "explanation",
+  "evidence",
+  "section_break_review",
+  "status",
+  "reviewed_by",
+  "review_note",
+  "granted_until",
+  "granted_extra_attempts"
+ ],
+ "fields": [
+  {
+   "fieldname": "member",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Member",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "member.full_name",
+   "fieldname": "member_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Member Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "course",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Course",
+   "options": "LMS Course",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "course.title",
+   "fieldname": "course_title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Course Title",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_ref",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "reference_type",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Item Type",
+   "options": "LMS Quiz\nLMS Assignment",
+   "reqd": 1
+  },
+  {
+   "fieldname": "reference_name",
+   "fieldtype": "Dynamic Link",
+   "label": "Item",
+   "options": "reference_type",
+   "reqd": 1
+  },
+  {
+   "fieldname": "reference_title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Item Title",
+   "read_only": 1
+  },
+  {
+   "fieldname": "current_deadline",
+   "fieldtype": "Datetime",
+   "label": "Deadline at Time of Request",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_request",
+   "fieldtype": "Section Break",
+   "label": "Request"
+  },
+  {
+   "fieldname": "reason_category",
+   "fieldtype": "Select",
+   "label": "Reason",
+   "options": "Sakit\nKendala Teknis\nKeperluan Keluarga atau Darurat\nLainnya",
+   "reqd": 1
+  },
+  {
+   "fieldname": "explanation",
+   "fieldtype": "Small Text",
+   "label": "Explanation",
+   "reqd": 1
+  },
+  {
+   "fieldname": "evidence",
+   "fieldtype": "Attach",
+   "label": "Evidence"
+  },
+  {
+   "fieldname": "section_break_review",
+   "fieldtype": "Section Break",
+   "label": "Review"
+  },
+  {
+   "default": "Pending",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Pending\nApproved\nRejected",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reviewed_by",
+   "fieldtype": "Link",
+   "label": "Reviewed By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "review_note",
+   "fieldtype": "Small Text",
+   "label": "Review Note"
+  },
+  {
+   "fieldname": "granted_until",
+   "fieldtype": "Datetime",
+   "label": "Granted Until",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Quiz only. Extra attempts allowed for this student on top of the quiz's own Max Attempts.",
+   "fieldname": "granted_extra_attempts",
+   "fieldtype": "Int",
+   "label": "Granted Extra Attempts",
+   "non_negative": 1,
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-09-13 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "LMS",
+ "name": "LMS Extension Request",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "select": 1,
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Moderator",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Course Creator",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Batch Evaluator",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "if_owner": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "LMS Student",
+   "share": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [
+  {
+   "color": "Orange",
+   "title": "Pending"
+  },
+  {
+   "color": "Green",
+   "title": "Approved"
+  },
+  {
+   "color": "Red",
+   "title": "Rejected"
+  }
+ ],
+ "title_field": "member_name",
+ "track_changes": 1
+}

@@ -56,6 +56,8 @@ class LMSAssignmentSubmission(Document):
 			course=schedule.course,
 			member=self.member,
 			label=schedule.title or _("This assignment"),
+			reference_type="LMS Assignment",
+			reference_name=self.assignment,
 		)
 
 	def validate_drip_window(self):

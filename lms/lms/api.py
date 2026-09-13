@@ -1360,6 +1360,268 @@ def update_quiz_score(submission: str, percentage):
 	return values
 
 
+DEFAULT_MAX_EXTENSION_REQUESTS = 2
+
+
+def _can_review_extension_request(course: str) -> bool:
+	"""This course's own instructor, any Moderator, or any System Manager -
+	the reviewer set the user chose for Extension Requests, same split as
+	_can_view_gradebook plus the course-instructor case."""
+	if "System Manager" in frappe.get_roles() or "Moderator" in frappe.get_roles():
+		return True
+	return can_modify_course(course)
+
+
+@frappe.whitelist()
+def get_extendable_items(course: str):
+	"""Quiz/Assignment items in `course` currently blocked for the calling
+	student (schedule ended, or - quiz only - its chapter deadline-closed) -
+	the picker list behind the student's "Request Extension" button. Empty
+	items with feature_enabled False when the course hasn't turned this on.
+	"""
+	member = frappe.session.user
+	course_settings = frappe.db.get_value(
+		"LMS Course", course, ["allow_extension_requests", "max_extension_requests"], as_dict=True
+	)
+	limit = (course_settings and course_settings.max_extension_requests) or DEFAULT_MAX_EXTENSION_REQUESTS
+	requests_used = frappe.db.count(
+		"LMS Extension Request", {"member": member, "course": course, "status": ["!=", "Rejected"]}
+	)
+	result = {
+		"feature_enabled": bool(course_settings and course_settings.allow_extension_requests),
+		"requests_used": requests_used,
+		"requests_limit": limit,
+		"chapters_pending": False,
+		"items": [],
+	}
+	if not result["feature_enabled"]:
+		return result
+
+	from lms.lms.permissions import get_deadline_closed_lessons, get_drip_locked_chapters, get_membership
+	from lms.lms.schedule_utils import enrich_schedule_payload, get_active_extension
+
+	if not get_membership(course, member):
+		return result
+
+	# The picker only opens once every chapter has released for this student -
+	# not once everything is passed (a still-blocked quiz can never itself
+	# become "complete", so gating on progress=100% would make this
+	# unreachable for exactly the students who need it). Remaining
+	# drip-locked chapters means there is still new content coming, so it is
+	# too early to talk about extensions yet.
+	if get_drip_locked_chapters(course):
+		result["chapters_pending"] = True
+		return result
+
+	deadline_closed_lessons = get_deadline_closed_lessons(course)
+	pending_refs = set(
+		frappe.get_all(
+			"LMS Extension Request",
+			{"member": member, "course": course, "status": "Pending"},
+			pluck="reference_name",
+		)
+	)
+
+	quizzes = frappe.get_all(
+		"LMS Quiz",
+		{"course": course},
+		[
+			"name",
+			"title",
+			"lesson",
+			"enable_scheduling",
+			"schedule_start",
+			"schedule_end",
+			"deadline_type",
+			"deadline_days",
+			"drip_type",
+			"drip_date",
+			"drip_days",
+		],
+	)
+	for quiz in quizzes:
+		if get_active_extension(member, "LMS Quiz", quiz.name):
+			continue
+		payload = enrich_schedule_payload({**quiz, "doctype": "LMS Quiz", "course": course}, member=member)
+		chapter_closed = bool(quiz.lesson and quiz.lesson in deadline_closed_lessons)
+		if payload.get("schedule_block_reason") != "ended" and not chapter_closed:
+			continue
+		result["items"].append(
+			{
+				"reference_type": "LMS Quiz",
+				"reference_name": quiz.name,
+				"title": quiz.title,
+				"reason": "chapter_closed" if chapter_closed else "schedule_ended",
+				"current_deadline": payload.get("schedule_end_iso") or payload.get("schedule_end"),
+				"has_pending_request": quiz.name in pending_refs,
+			}
+		)
+
+	assignments = frappe.get_all(
+		"LMS Assignment",
+		{"course": course},
+		[
+			"name",
+			"title",
+			"enable_scheduling",
+			"schedule_start",
+			"schedule_end",
+			"deadline_type",
+			"deadline_days",
+			"drip_type",
+			"drip_date",
+			"drip_days",
+		],
+	)
+	for assignment in assignments:
+		if get_active_extension(member, "LMS Assignment", assignment.name):
+			continue
+		payload = enrich_schedule_payload(
+			{**assignment, "doctype": "LMS Assignment", "course": course}, member=member
+		)
+		if payload.get("schedule_block_reason") != "ended":
+			continue
+		result["items"].append(
+			{
+				"reference_type": "LMS Assignment",
+				"reference_name": assignment.name,
+				"title": assignment.title,
+				"reason": "schedule_ended",
+				"current_deadline": payload.get("schedule_end_iso") or payload.get("schedule_end"),
+				"has_pending_request": assignment.name in pending_refs,
+			}
+		)
+
+	return result
+
+
+@frappe.whitelist()
+def get_extension_requests(course: str = None, status: str = None):
+	"""Extension requests the caller may review - a specific course (must be
+	one they can review), or every course if they are Moderator/System
+	Manager. Mirrors get_gradebook's own scoping requirement.
+	"""
+	if not course and not ("System Manager" in frappe.get_roles() or "Moderator" in frappe.get_roles()):
+		frappe.throw(_("Provide a course, or view as Moderator/System Manager."), frappe.PermissionError)
+	if course and not _can_review_extension_request(course):
+		frappe.throw(_("You are not permitted to view requests for this course."), frappe.PermissionError)
+
+	filters = {}
+	if course:
+		filters["course"] = course
+	if status:
+		filters["status"] = status
+
+	return frappe.get_all(
+		"LMS Extension Request",
+		filters,
+		[
+			"name",
+			"member",
+			"member_name",
+			"course",
+			"course_title",
+			"reference_type",
+			"reference_name",
+			"reference_title",
+			"current_deadline",
+			"reason_category",
+			"explanation",
+			"evidence",
+			"status",
+			"reviewed_by",
+			"review_note",
+			"granted_until",
+			"granted_extra_attempts",
+			"creation",
+		],
+		order_by="creation desc",
+	)
+
+
+def _notify_extension_reviewed(name: str, member: str, reference_type: str, reference_name: str, status: str, review_note: str):
+	from frappe.desk.doctype.notification_log.notification_log import make_notification_logs
+
+	title = frappe.db.get_value(reference_type, reference_name, "title")
+	notification = frappe._dict(
+		{
+			"subject": _("Your extension request for {0} was {1}").format(frappe.bold(title), _(status)),
+			"email_content": review_note or "",
+			"document_type": "LMS Extension Request",
+			"document_name": name,
+			"for_user": member,
+			"from_user": frappe.session.user,
+			"type": "Alert",
+			"link": "",
+		}
+	)
+	make_notification_logs(notification, [member])
+
+
+@frappe.whitelist()
+def approve_extension_request(
+	name: str, granted_until: str, granted_extra_attempts: int = 0, review_note: str = None
+):
+	request = frappe.db.get_value(
+		"LMS Extension Request",
+		name,
+		["course", "status", "member", "reference_type", "reference_name"],
+		as_dict=True,
+	)
+	if not request:
+		frappe.throw(_("Extension request not found."), frappe.DoesNotExistError)
+	if not _can_review_extension_request(request.course):
+		frappe.throw(_("You are not permitted to review this request."), frappe.PermissionError)
+	if request.status != "Pending":
+		frappe.throw(_("This request has already been reviewed."))
+	if not granted_until:
+		frappe.throw(_("Please set the new deadline to grant."))
+
+	granted_extra_attempts = cint(granted_extra_attempts)
+	if granted_extra_attempts < 0:
+		frappe.throw(_("Granted extra attempts cannot be negative."))
+
+	frappe.db.set_value(
+		"LMS Extension Request",
+		name,
+		{
+			"status": "Approved",
+			"reviewed_by": frappe.session.user,
+			"review_note": review_note,
+			"granted_until": get_datetime(granted_until),
+			"granted_extra_attempts": granted_extra_attempts,
+		},
+	)
+	_notify_extension_reviewed(
+		name, request.member, request.reference_type, request.reference_name, "Approved", review_note
+	)
+
+
+@frappe.whitelist()
+def reject_extension_request(name: str, review_note: str = None):
+	request = frappe.db.get_value(
+		"LMS Extension Request",
+		name,
+		["course", "status", "member", "reference_type", "reference_name"],
+		as_dict=True,
+	)
+	if not request:
+		frappe.throw(_("Extension request not found."), frappe.DoesNotExistError)
+	if not _can_review_extension_request(request.course):
+		frappe.throw(_("You are not permitted to review this request."), frappe.PermissionError)
+	if request.status != "Pending":
+		frappe.throw(_("This request has already been reviewed."))
+
+	frappe.db.set_value(
+		"LMS Extension Request",
+		name,
+		{"status": "Rejected", "reviewed_by": frappe.session.user, "review_note": review_note},
+	)
+	_notify_extension_reviewed(
+		name, request.member, request.reference_type, request.reference_name, "Rejected", review_note
+	)
+
+
 @frappe.whitelist()
 def get_my_grades():
 	"""The calling user's own quiz/assignment results and certificates, across

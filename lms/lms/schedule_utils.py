@@ -111,40 +111,84 @@ def resolve_effective_schedule_end(
 	return get_datetime(f"{deadline_date} 23:59:59")
 
 
-def _resolve_doc_schedule_end(doc: dict, course: str | None, member: str | None):
-	"""``schedule_end`` for ``doc``, resolved per-student when its
-	``deadline_type`` is "Days after release" - the one place this
-	resolution lives, shared by assert_doc_within_schedule (write side) and
-	enrich_schedule_payload (read side) so the two can never drift apart.
+def get_active_extension(member: str | None, reference_type: str | None, reference_name: str | None):
+	"""The Approved ``LMS Extension Request`` for (member, reference_type,
+	reference_name) whose granted window hasn't passed yet, or None.
 
-	``course``/``member`` are optional so a caller that hasn't got them (or
-	a doc whose deadline_type is blank, the overwhelming majority today)
-	pays nothing extra: the stored schedule_end passes through untouched.
+	A quiz/assignment can have several resolved (Approved/Rejected) requests
+	over time from the same student - only the latest still-valid Approved
+	one should ever extend access, so this always takes the furthest
+	``granted_until`` among still-open ones rather than the newest row.
 	"""
-	schedule_end = doc.get("schedule_end")
-	if doc.get("deadline_type") != "Days after release" or not course or not member:
-		return schedule_end
-
-	from lms.lms.permissions import get_drip_anchor_dates
-
-	enrollment_creation, batch_start = get_drip_anchor_dates(course, member)
-	if not enrollment_creation:
-		return schedule_end
-
-	return resolve_effective_schedule_end(
-		schedule_end,
-		doc.get("deadline_type"),
-		doc.get("deadline_days"),
-		doc.get("drip_type"),
-		doc.get("drip_date"),
-		doc.get("drip_days"),
-		enrollment_creation,
-		batch_start,
+	if not member or not reference_type or not reference_name:
+		return None
+	return frappe.db.get_value(
+		"LMS Extension Request",
+		{
+			"member": member,
+			"reference_type": reference_type,
+			"reference_name": reference_name,
+			"status": "Approved",
+			"granted_until": [">=", now_datetime()],
+		},
+		["name", "granted_until", "granted_extra_attempts"],
+		as_dict=True,
+		order_by="granted_until desc",
 	)
 
 
+def _resolve_doc_schedule_end(
+	doc: dict,
+	course: str | None,
+	member: str | None,
+	*,
+	reference_type: str | None = None,
+	reference_name: str | None = None,
+):
+	"""``schedule_end`` for ``doc``, resolved per-student when its
+	``deadline_type`` is "Days after release", then extended further by an
+	Approved extension request if one grants a later cutoff - the one place
+	this resolution lives, shared by assert_doc_within_schedule (write side)
+	and enrich_schedule_payload (read side) so the two can never drift apart.
+
+	``course``/``member`` are optional so a caller that hasn't got them (or
+	a doc whose deadline_type is blank, the overwhelming majority today)
+	pays nothing extra beyond the extension lookup below.
+	"""
+	schedule_end = doc.get("schedule_end")
+
+	if doc.get("deadline_type") == "Days after release" and course and member:
+		from lms.lms.permissions import get_drip_anchor_dates
+
+		enrollment_creation, batch_start = get_drip_anchor_dates(course, member)
+		if enrollment_creation:
+			schedule_end = resolve_effective_schedule_end(
+				schedule_end,
+				doc.get("deadline_type"),
+				doc.get("deadline_days"),
+				doc.get("drip_type"),
+				doc.get("drip_date"),
+				doc.get("drip_days"),
+				enrollment_creation,
+				batch_start,
+			)
+
+	reference_name = reference_name or doc.get("name")
+	extension = get_active_extension(member, reference_type, reference_name)
+	if extension and (not schedule_end or get_datetime(extension.granted_until) > get_datetime(schedule_end)):
+		schedule_end = extension.granted_until
+
+	return schedule_end
+
+
 def assert_doc_within_schedule(
-	doc: dict, *, course: str | None = None, member: str | None = None, label: str | None = None
+	doc: dict,
+	*,
+	course: str | None = None,
+	member: str | None = None,
+	label: str | None = None,
+	reference_type: str | None = None,
+	reference_name: str | None = None,
 ) -> None:
 	"""Convenience wrapper for a quiz/assignment dict (e.g. from
 	``frappe.db.get_value(..., as_dict=1)``).
@@ -152,12 +196,16 @@ def assert_doc_within_schedule(
 	Pass ``course``/``member`` to also honour a "Days after release"
 	deadline_type - without them this behaves exactly as before (raw
 	schedule_end only), which is the correct fallback since resolving a
-	relative deadline needs both.
+	relative deadline needs both. Pass ``reference_type``/``reference_name``
+	(or rely on ``doc["name"]``) so an Approved extension request can also
+	be honoured.
 	"""
 	assert_within_schedule(
 		doc.get("enable_scheduling"),
 		doc.get("schedule_start"),
-		_resolve_doc_schedule_end(doc, course, member),
+		_resolve_doc_schedule_end(
+			doc, course, member, reference_type=reference_type, reference_name=reference_name
+		),
 		label=label,
 	)
 
@@ -185,10 +233,14 @@ def enrich_schedule_payload(doc: dict, *, member: str | None = None) -> dict:
 	real call site without forcing it to be passed explicitly. When the
 	doc's deadline_type is "Days after release", the resolved schedule_end
 	is this member's own per-student cutoff rather than the raw stored
-	field - see resolve_effective_schedule_end.
+	field - see resolve_effective_schedule_end. ``doc["doctype"]``/``doc["name"]``
+	(present on any ``Document.as_dict()``, which both real callers pass) are
+	used to also honour an Approved extension request for this item.
 	"""
 	member = member or frappe.session.user
-	schedule_end = _resolve_doc_schedule_end(doc, doc.get("course"), member)
+	schedule_end = _resolve_doc_schedule_end(
+		doc, doc.get("course"), member, reference_type=doc.get("doctype"), reference_name=doc.get("name")
+	)
 
 	doc["schedule_block_reason"] = get_schedule_block_reason(
 		doc.get("enable_scheduling"),

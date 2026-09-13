@@ -114,6 +114,22 @@
 				{{ __('Enroll') }}
 			</Button>
 			<Button
+				v-if="
+					tab?.key === 'dashboard' &&
+					course.data?.membership &&
+					course.data?.allow_extension_requests
+				"
+				variant="outline"
+				:class="isMobile ? '!size-9' : ''"
+				:tooltip="isMobile ? __('Request Extension') : undefined"
+				@click="showExtensionRequest = true"
+			>
+				<template #prefix>
+					<span class="lucide-clock size-4" />
+				</template>
+				<span v-if="!isMobile">{{ __('Request Extension') }}</span>
+			</Button>
+			<Button
 				v-if="tab?.key === 'settings' && user.data?.is_moderator && !isMobile"
 				:variant="course.data?.published ? 'outline' : 'solid'"
 				:theme="course.data?.published ? 'red' : 'gray'"
@@ -208,6 +224,11 @@
 		</template>
 	</TabbedDetailPage>
 	<LessonHelp v-model="showLessonHelp" />
+	<ExtensionRequestModal
+		v-if="course.data"
+		v-model="showExtensionRequest"
+		:course="course.data.name"
+	/>
 
 	<router-view />
 </template>
@@ -235,6 +256,7 @@ import CourseDashboard from '@/pages/Courses/CourseDashboard.vue'
 import CourseEditor from '@/pages/Courses/CourseEditor.vue'
 import CourseForm from '@/pages/Courses/CourseForm.vue'
 import LessonHelp from '@/components/LessonHelp.vue'
+import ExtensionRequestModal from '@/components/Modals/ExtensionRequestModal.vue'
 import ShortcutTooltip from '@/components/ShortcutTooltip.vue'
 import HeaderButton from '@/components/HeaderButton.vue'
 import { openFormRoute } from '@/composables/useFormRoute'
@@ -262,6 +284,7 @@ interface EditorSelection {
 
 const editorSelected = ref<EditorSelection | null>(null)
 const showLessonHelp = ref(false)
+const showExtensionRequest = ref(false)
 
 type CourseMenuItem = {
 	label: string

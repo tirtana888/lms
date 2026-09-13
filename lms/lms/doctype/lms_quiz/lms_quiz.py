@@ -213,6 +213,8 @@ def submit_quiz(
 		course=quiz_details.course,
 		member=frappe.session.user,
 		label=quiz_details.title or _("This quiz"),
+		reference_type="LMS Quiz",
+		reference_name=quiz,
 	)
 
 	data = process_results(results, quiz_details)

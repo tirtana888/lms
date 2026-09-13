@@ -677,6 +677,18 @@ const getSidebarItems = (forMobile = false) => {
 					},
 					activeFor: ['Gradebook'],
 				},
+				{
+					label: 'Extension Requests',
+					icon: 'Clock',
+					to: 'ExtensionRequests',
+					condition: () => {
+						return (
+							!forMobile &&
+							(isAdmin() || userResource?.data?.is_system_manager)
+						)
+					},
+					activeFor: ['ExtensionRequests'],
+				},
 			],
 		},
 	]
