@@ -7,7 +7,7 @@ from frappe.desk.doctype.notification_log.notification_log import make_notificat
 from frappe.model.document import Document
 from frappe.utils import validate_url
 
-from lms.lms.schedule_utils import assert_within_schedule
+from lms.lms.schedule_utils import assert_doc_within_schedule
 from lms.lms.utils import PRIVILEGED_ROLES, get_lms_route
 
 
@@ -34,16 +34,27 @@ class LMSAssignmentSubmission(Document):
 		schedule = frappe.db.get_value(
 			"LMS Assignment",
 			self.assignment,
-			["title", "enable_scheduling", "schedule_start", "schedule_end"],
+			[
+				"title",
+				"course",
+				"enable_scheduling",
+				"schedule_start",
+				"schedule_end",
+				"deadline_type",
+				"deadline_days",
+				"drip_type",
+				"drip_date",
+				"drip_days",
+			],
 			as_dict=True,
 		)
 		if not schedule:
 			return
 
-		assert_within_schedule(
-			schedule.enable_scheduling,
-			schedule.schedule_start,
-			schedule.schedule_end,
+		assert_doc_within_schedule(
+			schedule,
+			course=schedule.course,
+			member=self.member,
 			label=schedule.title or _("This assignment"),
 		)
 

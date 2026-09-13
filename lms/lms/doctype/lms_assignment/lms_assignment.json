@@ -23,6 +23,8 @@
   "schedule_start",
   "column_break_schedule",
   "schedule_end",
+  "deadline_type",
+  "deadline_days",
   "drip_section",
   "drip_type",
   "drip_date",
@@ -114,6 +116,20 @@
    "fieldname": "schedule_end",
    "fieldtype": "Datetime",
    "label": "Schedule End"
+  },
+  {
+   "depends_on": "enable_scheduling",
+   "description": "Leave as \"Fixed date\" to use Schedule End above. \"Days after release\" instead closes it a set number of days after this item's own drip release date for each student, so a rolling deadline never falls before the item has actually opened for them.",
+   "fieldname": "deadline_type",
+   "fieldtype": "Select",
+   "label": "Deadline Type",
+   "options": "\nFixed date\nDays after release"
+  },
+  {
+   "depends_on": "eval:doc.deadline_type==\"Days after release\"",
+   "fieldname": "deadline_days",
+   "fieldtype": "Int",
+   "label": "Deadline: Days After Release"
   },
   {
    "depends_on": "course",

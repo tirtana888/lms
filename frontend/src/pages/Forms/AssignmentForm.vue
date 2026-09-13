@@ -79,6 +79,19 @@
 				/>
 				<FormControl
 					v-if="assignment.enable_scheduling"
+					type="select"
+					v-model="assignment.deadline_type"
+					:label="__('Deadline Type')"
+					:options="[
+						{ label: __('Fixed date'), value: 'Fixed date' },
+						{ label: __('Days after release'), value: 'Days after release' },
+					]"
+				/>
+				<FormControl
+					v-if="
+						assignment.enable_scheduling &&
+						assignment.deadline_type !== 'Days after release'
+					"
 					type="datetime-local"
 					:model-value="toDatetimeLocal(assignment.schedule_end)"
 					@update:model-value="
@@ -90,6 +103,21 @@
 							'Optional. Leave empty to keep the assignment open after it starts.'
 						)
 					"
+				/>
+				<FormControl
+					v-if="
+						assignment.enable_scheduling &&
+						assignment.deadline_type === 'Days after release'
+					"
+					type="number"
+					v-model="assignment.deadline_days"
+					:label="__('Deadline: Days After Release')"
+					:description="
+						__(
+							'Closes this many days after this assignment opens for each student (their own drip release date), not one fixed date for everyone. Requires a Release setting above.'
+						)
+					"
+					:required="true"
 				/>
 				<div
 					role="group"
@@ -203,6 +231,8 @@ interface AssignmentFields {
 	enable_scheduling: number
 	schedule_start: string | null
 	schedule_end: string | null
+	deadline_type: string
+	deadline_days: number | null
 }
 
 const assignment = reactive<AssignmentFields>({
@@ -216,6 +246,8 @@ const assignment = reactive<AssignmentFields>({
 	enable_scheduling: 0,
 	schedule_start: null,
 	schedule_end: null,
+	deadline_type: '',
+	deadline_days: null,
 })
 
 // C4: edit mode used to copy its values out of the parent list's in-memory
@@ -257,6 +289,8 @@ watch(
 		assignment.enable_scheduling = doc.enable_scheduling ? 1 : 0
 		assignment.schedule_start = doc.schedule_start || null
 		assignment.schedule_end = doc.schedule_end || null
+		assignment.deadline_type = doc.deadline_type || ''
+		assignment.deadline_days = doc.deadline_days ?? null
 	},
 	{ immediate: true }
 )

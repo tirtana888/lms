@@ -28,7 +28,7 @@ from lms.lms.doctype.lms_question.lms_question import (
 	QUESTION_OPTION_FIELDS,
 	QUESTION_POSSIBILITY_FIELDS,
 )
-from lms.lms.schedule_utils import assert_within_schedule, validate_schedule_fields
+from lms.lms.schedule_utils import assert_doc_within_schedule, validate_schedule_fields
 from lms.lms.utils import (
 	generate_slug,
 	has_course_instructor_role,
@@ -192,6 +192,11 @@ def submit_quiz(
 			"enable_scheduling",
 			"schedule_start",
 			"schedule_end",
+			"deadline_type",
+			"deadline_days",
+			"drip_type",
+			"drip_date",
+			"drip_days",
 		],
 		as_dict=1,
 	)
@@ -203,10 +208,10 @@ def submit_quiz(
 	if not can_access_quiz(quiz):
 		frappe.throw(_("You are not authorized to submit this quiz."), frappe.PermissionError)
 
-	assert_within_schedule(
-		quiz_details.enable_scheduling,
-		quiz_details.schedule_start,
-		quiz_details.schedule_end,
+	assert_doc_within_schedule(
+		quiz_details,
+		course=quiz_details.course,
+		member=frappe.session.user,
 		label=quiz_details.title or _("This quiz"),
 	)
 

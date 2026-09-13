@@ -403,6 +403,17 @@
 					/>
 					<FormControl
 						v-if="doc.enable_scheduling"
+						type="select"
+						v-model="doc.deadline_type"
+						:label="__('Deadline Type')"
+						:options="[
+							{ label: __('Fixed date'), value: 'Fixed date' },
+							{ label: __('Days after release'), value: 'Days after release' },
+						]"
+						variant="outline"
+					/>
+					<FormControl
+						v-if="doc.enable_scheduling && doc.deadline_type !== 'Days after release'"
 						type="datetime-local"
 						:model-value="toDatetimeLocal(doc.schedule_end)"
 						@update:model-value="
@@ -413,6 +424,19 @@
 							__('Optional. Leave empty to keep the quiz open after it starts.')
 						"
 						variant="outline"
+					/>
+					<FormControl
+						v-if="doc.enable_scheduling && doc.deadline_type === 'Days after release'"
+						type="number"
+						v-model="doc.deadline_days"
+						:label="__('Deadline: Days After Release')"
+						:description="
+							__(
+								'Closes this many days after this quiz opens for each student (their own drip release date), not one fixed date for everyone. Requires a Release setting below.'
+							)
+						"
+						variant="outline"
+						:required="true"
 					/>
 				</div>
 			</div>
