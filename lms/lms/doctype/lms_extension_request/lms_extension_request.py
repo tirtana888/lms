@@ -25,6 +25,48 @@ class LMSExtensionRequest(Document):
 			self.validate_no_duplicate_pending()
 			self.validate_not_already_extended()
 
+	def after_insert(self):
+		self.notify_reviewers()
+
+	def notify_reviewers(self):
+		"""Nothing surfaced a new request to anyone who could act on it - a
+		reviewer had to think to check the Extension Requests page on their
+		own. Notify this course's own instructor(s), every Moderator, and
+		every System Manager, the same reviewer set _can_review_extension_request
+		(lms.lms.api) actually grants approve/reject to.
+		"""
+		from frappe.desk.doctype.notification_log.notification_log import make_notification_logs
+
+		from lms.lms.utils import get_lms_route
+
+		instructors = frappe.get_all(
+			"Course Instructor", {"parent": self.course, "parenttype": "LMS Course"}, pluck="instructor"
+		)
+		moderators = frappe.get_all("Has Role", {"role": "Moderator", "parenttype": "User"}, pluck="parent")
+		system_managers = frappe.get_all(
+			"Has Role", {"role": "System Manager", "parenttype": "User"}, pluck="parent"
+		)
+
+		recipients = {u for u in (instructors + moderators + system_managers) if u}
+		recipients.discard(self.member)
+		if not recipients:
+			return
+
+		notification = frappe._dict(
+			{
+				"subject": _("{0} requested a deadline extension for {1}").format(
+					frappe.bold(self.member_name or self.member), frappe.bold(self.reference_title)
+				),
+				"email_content": self.explanation or "",
+				"document_type": self.doctype,
+				"document_name": self.name,
+				"from_user": self.member,
+				"type": "Alert",
+				"link": f"{get_lms_route('extension-requests')}?course={self.course}",
+			}
+		)
+		make_notification_logs(notification, list(recipients))
+
 	def enforce_member_ownership(self):
 		"""A student may only ever request for themselves. Reviewers (who create
 		nothing here today, but may in future) are exempt so an admin action on
