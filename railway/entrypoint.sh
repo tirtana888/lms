@@ -34,6 +34,23 @@ rm -rf sites/assets
 cp -r /home/frappe/assets-backup sites/assets
 chown -R frappe:frappe sites/assets
 
+# socketio.js (the Node realtime server) reads its Redis target from the
+# bench-wide common_site_config.json, not the per-site config — set-config
+# without -g only writes site_config.json, which socketio never reads, so it
+# was falling back to 127.0.0.1:6379 and crash-looping. Set these globally,
+# every boot (cheap, idempotent), not just on first site creation.
+#
+# Deliberately BEFORE the new-site/migrate branch below, not after: `bench
+# migrate` needs a reachable redis_cache to run at all ("Service redis_cache
+# is not running"), and on a from-scratch volume this config has never been
+# written yet. Setting it after migrate meant the very first boot's migrate
+# path (site already created by a previous, interrupted boot, but this
+# config never reached) failed before ever reaching these lines - and
+# `set -e` aborted the whole script right there, every restart, forever.
+su frappe -c "bench set-config -g redis_cache '$REDIS_CACHE'"
+su frappe -c "bench set-config -g redis_queue '$REDIS_QUEUE'"
+su frappe -c "bench set-config -g redis_socketio '$REDIS_QUEUE'"
+
 if [ ! -d "sites/$SITE_NAME" ]; then
   echo "Site $SITE_NAME belum ada, membuat baru..."
   su frappe -c "bench new-site '$SITE_NAME' \
@@ -50,15 +67,6 @@ else
   # code changes alone never touch the database.
   su frappe -c "bench --site '$SITE_NAME' migrate"
 fi
-
-# socketio.js (the Node realtime server) reads its Redis target from the
-# bench-wide common_site_config.json, not the per-site config — set-config
-# without -g only writes site_config.json, which socketio never reads, so it
-# was falling back to 127.0.0.1:6379 and crash-looping. Set these globally,
-# every boot (cheap, idempotent), not just on first site creation.
-su frappe -c "bench set-config -g redis_cache '$REDIS_CACHE'"
-su frappe -c "bench set-config -g redis_queue '$REDIS_QUEUE'"
-su frappe -c "bench set-config -g redis_socketio '$REDIS_QUEUE'"
 
 su frappe -c "bench use '$SITE_NAME'"
 
