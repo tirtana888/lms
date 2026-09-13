@@ -1576,6 +1576,8 @@ def approve_extension_request(
 		frappe.throw(_("This request has already been reviewed."))
 	if not granted_until:
 		frappe.throw(_("Please set the new deadline to grant."))
+	if get_datetime(granted_until) <= now_datetime():
+		frappe.throw(_("The granted deadline must be in the future."))
 
 	granted_extra_attempts = cint(granted_extra_attempts)
 	if granted_extra_attempts < 0:

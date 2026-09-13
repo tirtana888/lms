@@ -114,7 +114,11 @@ class LMSQuizSubmission(Document):
 		if not original_end or now_datetime() <= get_datetime(original_end):
 			return
 
-		self.score = round(self.score_out_of * EXTENSION_SCORE_CAP_PERCENTAGE / 100)
+		# int(), not round(): round() can round UP past the cap (score_out_of=7 ->
+		# 80% = 5.6 -> round() gives 6 -> 6/7 = 85.7%, over the cap it exists to
+		# enforce). int() truncates toward zero, which for a non-negative value
+		# is floor - the capped score can equal but never exceed 80%.
+		self.score = int(self.score_out_of * EXTENSION_SCORE_CAP_PERCENTAGE / 100)
 		self.percentage = max(0, (self.score / self.score_out_of) * 100)
 
 	def notify_member(self):

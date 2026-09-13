@@ -4,6 +4,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.utils import now_datetime
 
 from lms.lms.utils import PRIVILEGED_ROLES
 
@@ -17,10 +18,12 @@ class LMSExtensionRequest(Document):
 		self.set_reference_title()
 		if self.is_new():
 			self.status = "Pending"
+			self.validate_enrollment()
 			self.snapshot_current_deadline()
 			self.validate_feature_enabled()
 			self.validate_request_cap()
 			self.validate_no_duplicate_pending()
+			self.validate_not_already_extended()
 
 	def enforce_member_ownership(self):
 		"""A student may only ever request for themselves. Reviewers (who create
@@ -47,6 +50,19 @@ class LMSExtensionRequest(Document):
 
 	def set_reference_title(self):
 		self.reference_title = frappe.db.get_value(self.reference_type, self.reference_name, "title")
+
+	def validate_enrollment(self):
+		"""get_extendable_items already requires enrollment before it will even
+		offer an item to pick, but that is the picker's own gate, not
+		enforcement - without this, a direct client.insert call could create a
+		request for a course the caller never enrolled in.
+		"""
+		if PRIVILEGED_ROLES & set(frappe.get_roles()):
+			return
+		from lms.lms.permissions import get_membership
+
+		if not get_membership(self.course, self.member):
+			frappe.throw(_("You are not enrolled in this course."), frappe.PermissionError)
 
 	def snapshot_current_deadline(self):
 		"""The deadline as it stood for this member at request time - shown to the
@@ -118,3 +134,23 @@ class LMSExtensionRequest(Document):
 			},
 		):
 			frappe.throw(_("You already have a pending extension request for this item."))
+
+	def validate_not_already_extended(self):
+		"""get_extendable_items already hides an item once it has a still-valid
+		Approved extension, but that is a UI convenience, not the enforcement -
+		block it here too so a direct client.insert call can't create a second,
+		redundant Approved row (and burn another slot of the cap) for something
+		already unlocked.
+		"""
+		active = frappe.db.exists(
+			"LMS Extension Request",
+			{
+				"member": self.member,
+				"reference_type": self.reference_type,
+				"reference_name": self.reference_name,
+				"status": "Approved",
+				"granted_until": [">=", now_datetime()],
+			},
+		)
+		if active:
+			frappe.throw(_("This item already has an active extension."))
