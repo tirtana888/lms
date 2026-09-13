@@ -34,6 +34,18 @@
 						</Button>
 					</router-link>
 					<CertificationLinks :courseName="course.data.name" class="w-full" />
+					<Button
+						v-if="course.data?.allow_extension_requests"
+						variant="outline"
+						size="md"
+						class="w-full"
+						@click="showExtensionRequest = true"
+					>
+						<template #prefix>
+							<span class="lucide-clock size-4" />
+						</template>
+						<span>{{ __('Request Extension') }}</span>
+					</Button>
 				</div>
 				<router-link
 					v-else-if="course.data?.paid_course && !isAdmin"
@@ -173,6 +185,11 @@
 			</section>
 		</div>
 	</div>
+	<ExtensionRequestModal
+		v-if="course.data"
+		v-model="showExtensionRequest"
+		:course="course.data.name"
+	/>
 </template>
 <script setup lang="ts">
 import { computed, inject, ref } from 'vue'
@@ -180,6 +197,7 @@ import { Badge, Button, FormControl, call, createResource, toast } from 'frappe-
 import { useRouter } from 'vue-router'
 import CertificationLinks from '@/components/CertificationLinks.vue'
 import VideoPreview from '@/components/VideoPreview.vue'
+import ExtensionRequestModal from '@/components/Modals/ExtensionRequestModal.vue'
 import { useTelemetry } from 'frappe-ui/frappe'
 import { openExternal } from '@/utils/openExternal'
 import type {
@@ -204,6 +222,7 @@ const props = withDefaults(
 
 const enrolling = ref(false)
 const accessCodeInput = ref('')
+const showExtensionRequest = ref(false)
 
 function enrollStudent(code?: string) {
 	if (!user.data) {
