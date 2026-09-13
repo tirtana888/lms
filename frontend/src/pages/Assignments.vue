@@ -16,6 +16,15 @@
 	>
 		<template #actions>
 			<Button
+				variant="subtle"
+				@click="router.push({ name: 'AssignmentSubmissionList' })"
+			>
+				<template #prefix>
+					<span class="lucide-clipboard-list size-4" />
+				</template>
+				{{ __('Check Submissions') }}
+			</Button>
+			<Button
 				v-if="!readOnlyMode"
 				variant="solid"
 				@click="openAssignmentForm('new')"
