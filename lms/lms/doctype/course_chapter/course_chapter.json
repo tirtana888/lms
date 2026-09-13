@@ -24,6 +24,7 @@
   "drip_date",
   "column_break_drip",
   "drip_days",
+  "deadline_days",
   "section_break_5",
   "lessons"
  ],
@@ -136,6 +137,14 @@
    "fieldtype": "Int",
    "label": "Days",
    "mandatory_depends_on": "eval:doc.drip_type==\"Days after enrollment\"||doc.drip_type==\"Days after batch start\"",
+   "non_negative": 1
+  },
+  {
+   "depends_on": "eval:doc.drip_type",
+   "description": "Optional. Closes this chapter (and any quiz/lesson content in it) this many days after it opens for each student, based on the Release setting above. Leave empty to keep it open once released.",
+   "fieldname": "deadline_days",
+   "fieldtype": "Int",
+   "label": "Deadline: Days After Release",
    "non_negative": 1
   }
  ],

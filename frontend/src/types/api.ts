@@ -100,6 +100,7 @@ export interface OutlineChapter {
 	drip_type?: string
 	drip_date?: string | null
 	drip_days?: number | null
+	deadline_days?: number | null
 	lessons?: OutlineLesson[]
 	/** Set only when the chapter is still drip-locked for this student —
 	 * shown on the collapsed chapter header, before it's expanded. */

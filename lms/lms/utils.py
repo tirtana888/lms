@@ -1239,16 +1239,28 @@ def get_course_outline(course: str, progress: bool = False) -> list:
 	files_by_name = get_scorm_files(chapters)
 	completed = get_completed_lessons(course, lesson_rows) if progress else set()
 
-	from lms.lms.permissions import enforces_lesson_completion, get_drip_locked_chapters
+	from lms.lms.permissions import (
+		enforces_lesson_completion,
+		get_deadline_closed_chapters,
+		get_drip_locked_chapters,
+	)
 
 	enforce = enforces_lesson_completion(course) if progress else False
 	# Same gate as _lock_state (permissions.py) — that one guards SCORM/quiz/mark-
 	# complete, this one is what the outline itself renders as locked. They must
 	# agree or a "locked" lesson looks openable right up until the student clicks it.
 	drip_locked_chapters = get_drip_locked_chapters(course) if progress else {}
+	deadline_closed_chapters = get_deadline_closed_chapters(course) if progress else {}
 
 	return build_outline(
-		chapters, lesson_rows, files_by_name, completed, progress, enforce, drip_locked_chapters
+		chapters,
+		lesson_rows,
+		files_by_name,
+		completed,
+		progress,
+		enforce,
+		drip_locked_chapters,
+		deadline_closed_chapters,
 	)
 
 
@@ -1267,6 +1279,7 @@ def get_outline_chapter(course: str) -> list:
 			CourseChapter.drip_type.as_("drip_type"),
 			CourseChapter.drip_date.as_("drip_date"),
 			CourseChapter.drip_days.as_("drip_days"),
+			CourseChapter.deadline_days.as_("deadline_days"),
 			CourseChapter.launch_file.as_("launch_file"),
 			CourseChapter.scorm_package.as_("scorm_package"),
 		)
@@ -1397,6 +1410,65 @@ def is_drip_blocked(drip_type, drip_date, drip_days, enrollment_creation, batch_
 	return bool(release) and getdate() < getdate(release)
 
 
+def resolve_chapter_deadline_date(
+	drip_type, drip_date, drip_days, deadline_days, enrollment_creation, batch_start_date
+):
+	"""The date a chapter's own relative deadline falls on for this student -
+	``deadline_days`` after its drip-resolved open date - or None when no
+	deadline is configured, or there is nothing to anchor one to (no
+	``drip_type``, or drip itself hasn't resolved an open date for this
+	student). A deadline with nothing to be relative to isn't resolvable,
+	same reasoning as resolve_effective_schedule_end's fallback for quizzes/
+	assignments.
+	"""
+	if not deadline_days:
+		return None
+	release_date = resolve_drip_release_date(drip_type, drip_date, drip_days, enrollment_creation, batch_start_date)
+	if not release_date:
+		return None
+	return add_days(getdate(release_date), cint(deadline_days))
+
+
+def has_chapter_deadline(course: str) -> bool:
+	"""Whether any chapter in ``course`` has a relative deadline configured.
+
+	Cheap existence check, same purpose as has_drip_schedule: skip resolving
+	an enrollment or reading chapter fields for the common case (no chapter
+	deadlines anywhere in the course)."""
+	return bool(frappe.db.exists("Course Chapter", {"course": course, "deadline_days": (">", 0)}))
+
+
+def compute_deadline_closed_chapters(course: str, enrollment_creation, batch_start_date) -> dict:
+	"""Chapter names in ``course`` whose own relative deadline has passed for
+	this student, mapped to the date each closed - the closing counterpart
+	to compute_drip_locked_chapters's opening one. A quiz embedded in a
+	closed chapter's lesson is blocked the same way it already is for a
+	not-yet-opened one: both feed the same locked-lesson set (_lock_state in
+	permissions.py), so nothing extra is needed to cascade this to quizzes.
+	"""
+	chapters = frappe.get_all(
+		"Course Chapter",
+		filters={"course": course, "deadline_days": (">", 0)},
+		fields=["name", "drip_type", "drip_date", "drip_days", "deadline_days"],
+	)
+	if not chapters:
+		return {}
+
+	closed = {}
+	for chapter in chapters:
+		deadline_date = resolve_chapter_deadline_date(
+			chapter.drip_type,
+			chapter.drip_date,
+			chapter.drip_days,
+			chapter.deadline_days,
+			enrollment_creation,
+			batch_start_date,
+		)
+		if deadline_date and getdate() > deadline_date:
+			closed[chapter.name] = deadline_date
+	return closed
+
+
 def compute_drip_locked_chapters(course: str, enrollment_creation, batch_start_date) -> dict:
 	"""Chapter names in ``course`` whose drip release hasn't arrived yet, mapped to
 	the date each one unlocks — the same date resolve_drip_release_date already
@@ -1475,8 +1547,17 @@ def build_outline(
 	progress: bool,
 	enforce_completion: bool = False,
 	drip_locked_chapters: dict | None = None,
+	deadline_closed_chapters: dict | None = None,
 ) -> list:
 	drip_locked_chapters = drip_locked_chapters or {}
+	# Kept separate from drip_locked_chapters rather than merged: unlock_date
+	# means "opens on" to the UI (Course Overview shows it on a collapsed
+	# chapter), and a closed chapter's deadline date would read as an
+	# opens-on date in the past instead of what actually happened - still
+	# locked either way, just without a date label that would say the wrong
+	# thing. See _lock_state (permissions.py) for the matching server-side
+	# enforcement this has to agree with.
+	deadline_closed_chapters = deadline_closed_chapters or {}
 	chapter_idx_by_name = {c.name: c.idx for c in chapters}
 	lessons_by_chapter = {}
 	for lr in lesson_rows:
@@ -1497,7 +1578,7 @@ def build_outline(
 			lesson.is_complete = lr.name in completed
 		lessons_by_chapter.setdefault(lr.chapter_name, []).append(lesson)
 
-	if progress and (enforce_completion or drip_locked_chapters):
+	if progress and (enforce_completion or drip_locked_chapters or deadline_closed_chapters):
 		locked = set()
 		if enforce_completion:
 			ordered_names = [lesson.name for c in chapters for lesson in lessons_by_chapter.get(c.name, [])]
@@ -1506,6 +1587,9 @@ def build_outline(
 			for lesson in lessons_by_chapter.get(chapter_name, []):
 				locked.add(lesson.name)
 				lesson.unlock_date = unlock_date
+		for chapter_name in deadline_closed_chapters:
+			for lesson in lessons_by_chapter.get(chapter_name, []):
+				locked.add(lesson.name)
 		for lessons in lessons_by_chapter.values():
 			for lesson in lessons:
 				lesson.locked = 1 if lesson.name in locked else 0
@@ -1523,6 +1607,7 @@ def build_outline(
 			drip_type=c.drip_type,
 			drip_date=c.drip_date,
 			drip_days=c.drip_days,
+			deadline_days=c.deadline_days,
 			launch_file=c.launch_file,
 			scorm_package=c.scorm_package,
 			idx=c.idx,

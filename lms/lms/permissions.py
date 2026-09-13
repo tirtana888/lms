@@ -228,6 +228,29 @@ def get_drip_locked_chapters(course: str) -> dict:
 	return compute_drip_locked_chapters(course, enrollment_creation, batch_start)
 
 
+def get_deadline_closed_chapters(course: str) -> dict:
+	"""Chapter names in ``course`` whose own relative deadline has passed for
+	the current user, mapped to the date each closed (see
+	compute_deadline_closed_chapters). Empty under the same exemptions as
+	get_drip_locked_chapters - course authors and unenrolled users are never
+	subject to it.
+	"""
+	if not isinstance(course, str) or not course:
+		return {}
+	if can_modify_course(course):
+		return {}
+
+	from lms.lms.utils import compute_deadline_closed_chapters, has_chapter_deadline
+
+	if not has_chapter_deadline(course):
+		return {}
+
+	enrollment_creation, batch_start = get_drip_anchor_dates(course)
+	if not enrollment_creation:
+		return {}
+	return compute_deadline_closed_chapters(course, enrollment_creation, batch_start)
+
+
 def _lock_state(course: str) -> tuple[set, list, set]:
 	"""``(locked names, every name in course order, completed names)``.
 
@@ -236,7 +259,8 @@ def _lock_state(course: str) -> tuple[set, list, set]:
 	"""
 	completion_gate = enforces_lesson_completion(course)
 	drip_locked_chapters = get_drip_locked_chapters(course)
-	if not completion_gate and not drip_locked_chapters:
+	deadline_closed_chapters = get_deadline_closed_chapters(course)
+	if not completion_gate and not drip_locked_chapters and not deadline_closed_chapters:
 		return set(), [], set()
 
 	# Local import: utils imports from permissions at call time, so importing utils at
@@ -252,6 +276,8 @@ def _lock_state(course: str) -> tuple[set, list, set]:
 		locked |= compute_locked_lessons(names, completed)
 	if drip_locked_chapters:
 		locked |= {row.name for row in rows if row.chapter_name in drip_locked_chapters}
+	if deadline_closed_chapters:
+		locked |= {row.name for row in rows if row.chapter_name in deadline_closed_chapters}
 
 	return locked, names, completed
 

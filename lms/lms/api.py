@@ -1949,6 +1949,7 @@ def upsert_chapter(
 	drip_type: str = None,
 	drip_date: str = None,
 	drip_days: int = None,
+	deadline_days: int = None,
 ):
 	if not isinstance(title, str):
 		frappe.throw(_("title must be a string"))
@@ -1970,6 +1971,10 @@ def upsert_chapter(
 			"drip_type": drip_type or "",
 			"drip_date": drip_date if drip_type == "On a fixed date" else None,
 			"drip_days": drip_days if drip_type in ("Days after enrollment", "Days after batch start") else None,
+			# A relative deadline is meaningless without a release to be
+			# relative to - clearing it alongside drip_type keeps a chapter
+			# from carrying a stale deadline from before drip was turned off.
+			"deadline_days": deadline_days if drip_type else None,
 		}
 	)
 

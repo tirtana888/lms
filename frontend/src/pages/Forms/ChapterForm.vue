@@ -111,6 +111,17 @@
 				v-model="chapter.drip_days"
 				:required="true"
 			/>
+			<FormControl
+				v-if="chapter.drip_type"
+				type="number"
+				:label="__('Deadline: Days After Release')"
+				:description="
+					__(
+						'Optional. Closes this chapter this many days after it opens for each student, based on the Release setting above. Leave empty to keep it open once released.'
+					)
+				"
+				v-model="chapter.deadline_days"
+			/>
 			</div>
 		</template>
 		<template #actions>
@@ -172,6 +183,7 @@ interface ChapterFields {
 	drip_type: string
 	drip_date: string | null
 	drip_days: number | null
+	deadline_days: number | null
 }
 
 const props = defineProps<{
@@ -221,6 +233,7 @@ const chapter = reactive<ChapterFields>({
 	drip_type: '',
 	drip_date: null,
 	drip_days: null,
+	deadline_days: null,
 })
 
 // C4 — edit mode used to be seeded from an in-memory row the parent passed in,
@@ -282,6 +295,7 @@ watch(
 		chapter.drip_type = found?.drip_type ?? ''
 		chapter.drip_date = found?.drip_date ?? null
 		chapter.drip_days = found?.drip_days ?? null
+		chapter.deadline_days = found?.deadline_days ?? null
 	},
 	{ immediate: true }
 )
@@ -297,6 +311,7 @@ const chapterResource = createResource({
 			drip_type: chapter.drip_type,
 			drip_date: chapter.drip_date,
 			drip_days: chapter.drip_days,
+			deadline_days: chapter.deadline_days,
 			name: isEdit.value ? props.chapterName : undefined,
 		}
 	},
@@ -318,6 +333,9 @@ const validateChapter = (): string | undefined => {
 		(chapter.drip_days === null || chapter.drip_days < 0)
 	) {
 		return __('Please enter the number of days')
+	}
+	if (chapter.deadline_days !== null && chapter.deadline_days < 0) {
+		return __('Deadline days must be 0 or more')
 	}
 	return undefined
 }
