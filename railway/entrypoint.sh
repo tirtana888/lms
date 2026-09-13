@@ -79,6 +79,13 @@ fi
 
 su frappe -c "bench use '$SITE_NAME'"
 
+# nginx ships with a placeholder rather than $host for X-Frappe-Site-Name (see
+# nginx-app.conf): this container serves exactly one site, so every hostname
+# pointed at it must resolve to that site instead of to a site named after
+# whatever domain was typed. Substituted here because the name is only known
+# from the environment at boot.
+sed -i "s/__FRAPPE_SITE_NAME__/$SITE_NAME/g" /etc/nginx/conf.d/frappe.conf
+
 # get_assets_json() caches assets.json in Redis under a *shared* key
 # (frappe.cache.get_value('assets_json', ..., shared=True)) — a namespace
 # `bench clear-cache` doesn't touch. A stale value from a previous image
