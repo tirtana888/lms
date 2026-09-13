@@ -172,6 +172,10 @@ fixtures = ["Custom Field", "Function", "Industry", "LMS Category"]
 #
 override_whitelisted_methods = {
 	# "frappe.desk.search.get_names_for_mentions": "lms.lms.utils.get_names_for_mentions",
+	# Lets a domain-restricted signup show our own message instead of the
+	# generic wording frappe.utils.oauth's own try/except forces on us, or a
+	# raw traceback for any other exception - see lms.lms.user.login_via_google.
+	"frappe.integrations.oauth2_logins.login_via_google": "lms.lms.user.login_via_google",
 }
 #
 # each overriding function accepts a `data` argument;

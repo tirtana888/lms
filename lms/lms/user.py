@@ -45,10 +45,14 @@ def _allowed_signup_email(email: str) -> bool:
 
 
 def validate_signup_domain(doc, method):
-	"""`before_insert` on User - closes the same self-signup gap for social
-	login that a check inside sign_up() alone would miss: Google/OAuth signup
-	(frappe.utils.oauth.get_user_record) creates a new User directly and never
-	calls sign_up() at all.
+	"""`before_insert` on User - a defense-in-depth backstop for any social
+	login path other than Google (frappe.utils.oauth.get_user_record creates
+	a new User directly and never calls sign_up() at all, for every
+	provider). Google itself is handled earlier and more cleanly by
+	login_via_google() below, which shows a proper message instead of
+	whatever generic/raw page raising an exception this deep would produce -
+	this hook is only a safety net in case another provider (GitHub, etc) is
+	ever enabled without a matching override.
 
 	Only applies to a brand-new, unauthenticated (Guest) signup, so it never
 	fires for a Moderator adding a member from Users - admin-invited members
@@ -58,6 +62,41 @@ def validate_signup_domain(doc, method):
 		return
 	if not _allowed_signup_email(doc.email):
 		frappe.throw(_("Please sign up using your institution email address."))
+
+
+@frappe.whitelist(allow_guest=True)  # nosemgrep: frappe-semgrep-rules.rules.security.guest-whitelisted-method
+def login_via_google(code: str, state: str):
+	"""Overrides frappe.integrations.oauth2_logins.login_via_google (see the
+	override_whitelisted_methods hook) purely to reject a domain-restricted
+	signup with our own message. Frappe's own login_via_oauth2() has no hook
+	for this: by the time our before_insert catch on User would fire, the
+	only exception frappe.utils.oauth.login_oauth_user() already catches
+	(SignupDisabledError) renders a hardcoded, unrelated message ("Signup
+	from Website is disabled"), and any other exception falls through to a
+	raw traceback page - neither is what we want shown to a rejected visitor.
+
+	Checking the domain here first, before any User doc is even built, sidesteps
+	that entirely. get_info_via_oauth() consumes Google's one-time-use code, so
+	from here on this calls login_oauth_user() directly (not login_via_oauth2,
+	which would try to redeem the same code again and fail).
+	"""
+	from frappe.integrations.oauth2_logins import decoder_compat
+	from frappe.utils.oauth import get_email, get_info_via_oauth, login_oauth_user
+
+	info = get_info_via_oauth("google", code, decoder=decoder_compat)
+	email = (get_email(info) or "").lower()
+
+	# Only a brand-new signup is subject to the restriction - an
+	# already-registered user (whatever their domain) can always log back in.
+	if email and not frappe.db.exists("User", email) and not _allowed_signup_email(email):
+		return frappe.respond_as_web_page(
+			_("Not Allowed"),
+			_("Please sign up using your institution email address."),
+			success=False,
+			http_status_code=403,
+		)
+
+	login_oauth_user(info, provider="google", state=state)
 
 
 @frappe.whitelist(allow_guest=True)  # nosemgrep: frappe-semgrep-rules.rules.security.guest-whitelisted-method
