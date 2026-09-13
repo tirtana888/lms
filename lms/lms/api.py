@@ -19,6 +19,7 @@ from frappe.integrations.frappe_providers.frappecloud_billing import (
 from frappe.translate import get_all_translations
 from frappe.utils import (
 	add_days,
+	add_to_date,
 	cint,
 	date_diff,
 	flt,
@@ -28,6 +29,7 @@ from frappe.utils import (
 	get_time,
 	getdate,
 	now,
+	now_datetime,
 )
 from frappe.utils.response import Response
 from pypika import functions as fn
@@ -450,6 +452,73 @@ def get_file_info(file_url):
 		"File", {"file_url": file_url}, ["file_name", "file_size", "file_url"], as_dict=1
 	)
 	return file_info
+
+
+DASHBOARD_ONLINE_WINDOW_MINUTES = 5
+
+
+@frappe.whitelist()
+def get_dashboard_overview():
+	"""Admin dashboard snapshot: who's currently active, recently joined, and
+	recent login activity - same audience as the rest of the admin Home area
+	(Moderator/Instructor/Evaluator/System Manager).
+
+	"Online" is a heuristic, not a real-time presence feed: User.last_active
+	is a real, already-maintained timestamp (updated on every request), not
+	new tracking - "online" here means "active in the last few minutes",
+	the same approximation most admin panels without a websocket layer use.
+	"""
+	if not (
+		has_moderator_role()
+		or has_course_instructor_role()
+		or has_evaluator_role()
+		or "System Manager" in frappe.get_roles()
+	):
+		frappe.throw(_("You are not permitted to view this dashboard."), frappe.PermissionError)
+
+	exclude = ("Administrator", "Guest")
+	online_cutoff = add_to_date(now_datetime(), minutes=-DASHBOARD_ONLINE_WINDOW_MINUTES)
+
+	online_users = frappe.get_all(
+		"User",
+		{"enabled": 1, "name": ["not in", exclude], "last_active": [">=", online_cutoff]},
+		["name", "full_name", "user_image", "last_active"],
+		order_by="last_active desc",
+		limit_page_length=10,
+	)
+
+	new_users = frappe.get_all(
+		"User",
+		{"enabled": 1, "name": ["not in", exclude]},
+		["name", "full_name", "user_image", "creation"],
+		order_by="creation desc",
+		limit_page_length=5,
+	)
+
+	events_log = frappe.get_all(
+		"Activity Log",
+		{"operation": "Login", "status": "Success", "user": ["not in", exclude]},
+		["user", "creation"],
+		order_by="creation desc",
+		limit_page_length=10,
+	)
+	event_users = {row.user for row in events_log}
+	user_details = frappe.get_all(
+		"User", {"name": ["in", list(event_users) or [""]]}, ["name", "full_name", "user_image"]
+	)
+	detail_by_user = {row.name: row for row in user_details}
+	for row in events_log:
+		detail = detail_by_user.get(row.user)
+		row.full_name = detail.full_name if detail else row.user
+		row.user_image = detail.user_image if detail else None
+
+	return {
+		"online_users": online_users,
+		"online_count": len(online_users),
+		"new_users": new_users,
+		"events_log": events_log,
+		"categories": frappe.db.count("LMS Category"),
+	}
 
 
 @frappe.whitelist(allow_guest=True)

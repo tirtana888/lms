@@ -507,7 +507,25 @@ const getSidebarItems = (forMobile = false) => {
 					to: 'Home',
 					activeFor: ['Home'],
 					condition: () => {
-						return userResource?.data
+						return userResource?.data && !isAdmin()
+					},
+				},
+				{
+					label: 'Dashboard',
+					icon: 'LayoutDashboard',
+					to: 'Dashboard',
+					activeFor: ['Dashboard'],
+					condition: () => {
+						return isAdmin()
+					},
+				},
+				{
+					label: 'Overview',
+					icon: 'LayoutList',
+					to: 'Overview',
+					activeFor: ['Overview'],
+					condition: () => {
+						return isAdmin()
 					},
 				},
 				{

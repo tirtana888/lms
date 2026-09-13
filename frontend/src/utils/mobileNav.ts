@@ -12,8 +12,14 @@ export interface NavLink {
 
 // Primaries are picked out of the admin-configured sidebar links, so disabling
 // a link in settings drops its tab too.
+// 'Home' and 'Dashboard' are mutually exclusive in sidebarLinks (a student
+// session never has the latter, an admin session never has the former - see
+// the Home entry's condition in getSidebarLinks), so listing both here just
+// fills the same primary slot with whichever one the current role actually
+// has, rather than costing admins their fourth tab.
 export const PRIMARY_LABELS: readonly string[] = [
 	'Home',
+	'Dashboard',
 	'Courses',
 	'Batches',
 	'Programs',
@@ -73,6 +79,7 @@ const SECTION_MAP: Record<string, readonly string[]> = {
 	LEARN: [
 		'Programs',
 		'Batches',
+		'Overview',
 		'Quizzes',
 		'Assignments',
 		'Programming Exercises',
