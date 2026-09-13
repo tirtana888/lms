@@ -46,6 +46,8 @@
 		"column_break_9",
 		"user_category",
 		"disable_signup",
+		"restrict_signup_domains",
+		"allowed_signup_domains",
 		"custom_signup_content",
 		"sidebar_tab",
 		"items_in_sidebar_section",
@@ -399,6 +401,20 @@
 			"fieldname": "disable_signup",
 			"fieldtype": "Check",
 			"label": "Disable Signup"
+		},
+		{
+			"default": "0",
+			"description": "When enabled, self-signup (the public Sign Up form and \"Login with Google\") is only allowed for the email domains listed below. Admin-invited members (added from Users) are never affected by this. Desk-only by design — not shown in the LMS's own Settings page — so only System Manager can change it.",
+			"fieldname": "restrict_signup_domains",
+			"fieldtype": "Check",
+			"label": "Restrict Signup to Institution Emails"
+		},
+		{
+			"depends_on": "eval:doc.restrict_signup_domains",
+			"description": "One domain per line or comma-separated, e.g. nusadaya.com. Only used when \"Restrict Signup to Institution Emails\" is checked.",
+			"fieldname": "allowed_signup_domains",
+			"fieldtype": "Small Text",
+			"label": "Allowed Signup Domains"
 		},
 		{
 			"fieldname": "seo_tab",

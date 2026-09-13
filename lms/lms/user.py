@@ -25,10 +25,48 @@ def add_lms_student_role(doc, method):
 	doc.append_roles("LMS Student")
 
 
+def _allowed_signup_email(email: str) -> bool:
+	"""True if `email`'s domain may self-register.
+
+	Restriction is off by default (every domain allowed). Once turned on,
+	an empty/unset domain list fails closed - nothing is allowed - rather
+	than silently behaving as unrestricted.
+	"""
+	if not frappe.db.get_single_value("LMS Settings", "restrict_signup_domains"):
+		return True
+
+	allowed = frappe.db.get_single_value("LMS Settings", "allowed_signup_domains") or ""
+	domains = {d.strip().lower() for d in allowed.replace(",", "\n").splitlines() if d.strip()}
+	if not domains:
+		return False
+
+	domain = (email or "").rsplit("@", 1)[-1].strip().lower()
+	return domain in domains
+
+
+def validate_signup_domain(doc, method):
+	"""`before_insert` on User - closes the same self-signup gap for social
+	login that a check inside sign_up() alone would miss: Google/OAuth signup
+	(frappe.utils.oauth.get_user_record) creates a new User directly and never
+	calls sign_up() at all.
+
+	Only applies to a brand-new, unauthenticated (Guest) signup, so it never
+	fires for a Moderator adding a member from Users - admin-invited members
+	can still use any email address.
+	"""
+	if frappe.session.user != "Guest":
+		return
+	if not _allowed_signup_email(doc.email):
+		frappe.throw(_("Please sign up using your institution email address."))
+
+
 @frappe.whitelist(allow_guest=True)  # nosemgrep: frappe-semgrep-rules.rules.security.guest-whitelisted-method
 def sign_up(email: str, full_name: str, verify_terms: bool, user_category: str):
 	if is_signup_disabled():
 		frappe.throw(_("Sign Up is disabled"), _("Not Allowed"))
+
+	if not _allowed_signup_email(email):
+		return 0, _("Please sign up using your institution email address.")
 
 	user = frappe.db.get("User", {"email": email})
 	if user:
