@@ -248,7 +248,7 @@ import {
 	useKeyboardShortcuts,
 	saveShortcut,
 } from '@/composables/useKeyboardShortcuts'
-import { onBeforeRouteLeave, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRouter } from 'vue-router'
 import { validateFile } from '@/utils'
 import RichTextEditor from '@/components/RichTextEditor.vue'
 import { safeUrl } from '@/utils/safeUrl'
@@ -557,12 +557,18 @@ onMounted(() => {
 	window.addEventListener('beforeunload', warnBeforeUnload)
 })
 
-onBeforeRouteLeave(() => {
+const confirmLeaveIfDirty = () => {
 	if (!isDirty.value) return true
 	return window.confirm(
 		__('You have unsaved changes to this assignment. Leave without saving?')
 	)
-})
+}
+
+onBeforeRouteLeave(confirmLeaveIfDirty)
+// Switching to another assignment keeps the same route with new params, which
+// onBeforeRouteLeave never sees; the parent's :key then remounts this component
+// and would drop the unsaved answer without asking.
+onBeforeRouteUpdate(confirmLeaveIfDirty)
 
 const submissionStatusOptions = computed(() => {
 	return [
