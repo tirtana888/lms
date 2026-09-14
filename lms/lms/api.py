@@ -1133,6 +1133,11 @@ MEMBER_FIELDS = [
 ]
 
 
+# Member management (Users list, Member Detail) is for Moderators and System
+# Managers; a System Manager doesn't necessarily also hold Moderator.
+MEMBER_ADMIN_ROLES = ["Moderator", "System Manager"]
+
+
 def member_roles(member: str) -> list[str]:
 	roles = frappe.get_all(
 		"Has Role",
@@ -1153,7 +1158,7 @@ def get_member(member: str):
 	cannot answer "give me this one row": a member past the first page, or a
 	disabled one, came back empty and left the form unable to save.
 	"""
-	frappe.only_for(["Moderator"])
+	frappe.only_for(MEMBER_ADMIN_ROLES)
 
 	if not isinstance(member, str):
 		frappe.throw(_("Invalid member."), frappe.ValidationError)
@@ -1172,7 +1177,7 @@ def get_member(member: str):
 
 @frappe.whitelist()
 def get_members(start: int = 0, search: str = None, role: str = "All"):
-	frappe.only_for(["Moderator"])
+	frappe.only_for(MEMBER_ADMIN_ROLES)
 
 	lms_roles = LMS_ROLES
 	if not isinstance(role, str) or role not in (["All"] + lms_roles):
@@ -1683,7 +1688,7 @@ def get_member_overview(member: str):
 	Activity Log, LMS Enrollment/Quiz Submission/Certificate/Program Member) —
 	this just gathers it into one call instead of adding new tracking.
 	"""
-	frappe.only_for(["Moderator"])
+	frappe.only_for(MEMBER_ADMIN_ROLES)
 
 	if not isinstance(member, str):
 		frappe.throw(_("Invalid member."), frappe.ValidationError)
@@ -1768,7 +1773,7 @@ def add_member_tag(member: str, tag: str):
 	directly: it has no permission check of its own (a bare frappe.db.set_value),
 	so exposing it as-is would let any logged-in user tag any User record.
 	"""
-	frappe.only_for(["Moderator"])
+	frappe.only_for(MEMBER_ADMIN_ROLES)
 	member = _validate_member(member)
 	tag = (tag or "").strip()
 	if not tag:
@@ -1785,7 +1790,7 @@ def add_member_tag(member: str, tag: str):
 
 @frappe.whitelist()
 def remove_member_tag(member: str, tag: str):
-	frappe.only_for(["Moderator"])
+	frappe.only_for(MEMBER_ADMIN_ROLES)
 	member = _validate_member(member)
 	current = [t for t in _member_tags(member) if t.lower() != (tag or "").strip().lower()]
 	frappe.db.set_value(
@@ -1796,7 +1801,7 @@ def remove_member_tag(member: str, tag: str):
 
 @frappe.whitelist()
 def get_member_notes(member: str) -> list:
-	frappe.only_for(["Moderator"])
+	frappe.only_for(MEMBER_ADMIN_ROLES)
 	member = _validate_member(member)
 	return frappe.get_all(
 		"Comment",
@@ -1814,12 +1819,17 @@ def add_member_note(member: str, content: str):
 	only grants System Manager read/write — the same reason get_member/
 	get_member_overview/save_role all go around it via ignore_permissions).
 	"""
-	frappe.only_for(["Moderator"])
+	frappe.only_for(MEMBER_ADMIN_ROLES)
 	member = _validate_member(member)
 	content = (content or "").strip()
 	if not content:
 		frappe.throw(_("Note cannot be empty."), frappe.ValidationError)
 
+	_insert_member_note(member, content)
+	return get_member_notes(member)
+
+
+def _insert_member_note(member: str, content: str) -> None:
 	comment = frappe.new_doc("Comment")
 	comment.update(
 		{
@@ -1832,12 +1842,11 @@ def add_member_note(member: str, content: str):
 		}
 	)
 	comment.insert(ignore_permissions=True)
-	return get_member_notes(member)
 
 
 @frappe.whitelist()
 def delete_member_note(name: str):
-	frappe.only_for(["Moderator"])
+	frappe.only_for(MEMBER_ADMIN_ROLES)
 	comment = frappe.get_doc("Comment", name)
 	if comment.reference_doctype != "User":
 		frappe.throw(_("Invalid note."), frappe.PermissionError)
@@ -1860,14 +1869,243 @@ def suspend_member(member: str):
 	already-open session is not force-ended by this — it takes effect on
 	their next login.
 	"""
-	frappe.only_for(["Moderator"])
+	frappe.only_for(MEMBER_ADMIN_ROLES)
 	_set_member_enabled(member, 0)
 
 
 @frappe.whitelist()
 def unsuspend_member(member: str):
-	frappe.only_for(["Moderator"])
+	frappe.only_for(MEMBER_ADMIN_ROLES)
 	_set_member_enabled(member, 1)
+
+
+PROGRESS_ACTIONS = ("complete", "reset")
+PROGRESS_SCOPES = ("course", "chapter", "lesson")
+
+
+def _member_enrollment(member: str, course: str) -> str:
+	if not isinstance(course, str) or not course:
+		frappe.throw(_("Invalid course."), frappe.ValidationError)
+	enrollment = frappe.db.get_value("LMS Enrollment", {"member": member, "course": course}, "name")
+	if not enrollment:
+		frappe.throw(_("{0} is not enrolled in this course.").format(member), frappe.ValidationError)
+	return enrollment
+
+
+def _course_structure(course: str) -> list:
+	"""The course's chapters in order, each carrying its ordered lesson names."""
+	chapter_names = frappe.get_all("Chapter Reference", {"parent": course}, pluck="chapter", order_by="idx")
+	if not chapter_names:
+		return []
+	titles = dict(
+		frappe.get_all("Course Chapter", {"name": ["in", chapter_names]}, ["name", "title"], as_list=True)
+	)
+	lessons_by_chapter = {}
+	for row in frappe.get_all(
+		"Lesson Reference", {"parent": ["in", chapter_names]}, ["parent", "lesson"], order_by="idx"
+	):
+		lessons_by_chapter.setdefault(row.parent, []).append(row.lesson)
+	return [
+		frappe._dict(name=name, title=titles.get(name) or name, lessons=lessons_by_chapter.get(name, []))
+		for name in chapter_names
+	]
+
+
+def _lesson_assessment_names(lesson) -> tuple[list, list]:
+	"""Quizzes and assignments embedded in a lesson, found the same way
+	course_lesson.get_quiz_progress/get_assignment_progress find them."""
+	from lms.lms.md import find_macros
+
+	quizzes, assignments = [], []
+	if lesson.content:
+		for block in get_editorjs_blocks(lesson.content):
+			data = block.get("data") or {}
+			if block.get("type") == "quiz":
+				quizzes.append(data.get("quiz"))
+			elif block.get("type") == "assignment":
+				assignments.append(data.get("assignment"))
+			elif block.get("type") == "upload" and isinstance(data.get("quizzes"), list):
+				quizzes += [row.get("quiz") for row in data["quizzes"] if isinstance(row, dict)]
+	elif lesson.body:
+		for name, value in find_macros(lesson.body):
+			if name == "Quiz":
+				quizzes.append(value)
+			elif name == "Assignment":
+				assignments.append(value)
+	return [q for q in quizzes if q], [a for a in assignments if a]
+
+
+def _member_quiz_result(quiz: str, member: str) -> dict:
+	details = (
+		frappe.db.get_value("LMS Quiz", quiz, ["title", "passing_percentage"], as_dict=True) or frappe._dict()
+	)
+	best = frappe.get_all(
+		"LMS Quiz Submission",
+		{"quiz": quiz, "member": member},
+		["percentage"],
+		order_by="percentage desc",
+		limit=1,
+	)
+	percentage = best[0].percentage if best else None
+	return {
+		"name": quiz,
+		"title": details.title or quiz,
+		"percentage": percentage,
+		"passed": percentage is not None
+		and frappe.utils.flt(percentage) >= frappe.utils.flt(details.passing_percentage),
+	}
+
+
+def _member_assignment_result(assignment: str, member: str) -> dict:
+	latest = frappe.get_all(
+		"LMS Assignment Submission",
+		{"assignment": assignment, "member": member},
+		["status"],
+		order_by="creation desc",
+		limit=1,
+	)
+	return {
+		"name": assignment,
+		"title": frappe.db.get_value("LMS Assignment", assignment, "title") or assignment,
+		"status": latest[0].status if latest else None,
+	}
+
+
+@frappe.whitelist()
+def get_member_course_progress(member: str, course: str):
+	"""One member's chapter -> lesson progress in one course, with each lesson's
+	quizzes (best score) and assignments (latest status)."""
+	frappe.only_for(MEMBER_ADMIN_ROLES)
+	member = _validate_member(member)
+	enrollment = _member_enrollment(member, course)
+
+	chapters = _course_structure(course)
+	lesson_names = [lesson for chapter in chapters for lesson in chapter.lessons] or [""]
+	lessons = {
+		row.name: row
+		for row in frappe.get_all(
+			"Course Lesson", {"name": ["in", lesson_names]}, ["name", "title", "content", "body"]
+		)
+	}
+	status_by_lesson = dict(
+		frappe.get_all(
+			"LMS Course Progress",
+			{"member": member, "lesson": ["in", lesson_names]},
+			["lesson", "status"],
+			as_list=True,
+		)
+	)
+
+	outline = []
+	for chapter in chapters:
+		rows = []
+		for name in chapter.lessons:
+			lesson = lessons.get(name)
+			if not lesson:
+				continue
+			quiz_names, assignment_names = _lesson_assessment_names(lesson)
+			rows.append(
+				{
+					"name": name,
+					"title": lesson.title,
+					"status": status_by_lesson.get(name),
+					"quizzes": [_member_quiz_result(quiz, member) for quiz in quiz_names],
+					"assignments": [
+						_member_assignment_result(assignment, member) for assignment in assignment_names
+					],
+				}
+			)
+		outline.append({"name": chapter.name, "title": chapter.title, "lessons": rows})
+
+	return {
+		"progress": frappe.db.get_value("LMS Enrollment", enrollment, "progress") or 0,
+		"chapters": outline,
+	}
+
+
+@frappe.whitelist()
+def set_member_progress(member: str, course: str, action: str, scope: str, target: str = None):
+	"""Mark a member's lessons complete, or reset them, for a whole course, one
+	chapter, or one lesson. Completing skips the quiz/assignment requirement.
+	Reset only removes LMS Course Progress rows - quiz and assignment
+	submissions are kept. Every change is written to the member's notes."""
+	frappe.only_for(MEMBER_ADMIN_ROLES)
+	member = _validate_member(member)
+	enrollment = _member_enrollment(member, course)
+	if action not in PROGRESS_ACTIONS or scope not in PROGRESS_SCOPES:
+		frappe.throw(_("Invalid progress action."), frappe.ValidationError)
+
+	chapters = _course_structure(course)
+	course_title = frappe.db.get_value("LMS Course", course, "title") or course
+	if scope == "course":
+		lessons = [lesson for chapter in chapters for lesson in chapter.lessons]
+		scope_label = _("course {0}").format(course_title)
+	elif scope == "chapter":
+		chapter = next((c for c in chapters if c.name == target), None)
+		if not chapter:
+			frappe.throw(_("This chapter is not part of the course."), frappe.ValidationError)
+		lessons = chapter.lessons
+		scope_label = _("chapter {0} in {1}").format(chapter.title, course_title)
+	else:
+		if not target or not any(target in chapter.lessons for chapter in chapters):
+			frappe.throw(_("This lesson is not part of the course."), frappe.ValidationError)
+		lessons = [target]
+		lesson_title = frappe.db.get_value("Course Lesson", target, "title") or target
+		scope_label = _("lesson {0} in {1}").format(lesson_title, course_title)
+
+	from lms.lms.doctype.lms_enrollment.lms_enrollment import batched_enrollment_updates, update_enrollment
+
+	existing = frappe.get_all(
+		"LMS Course Progress",
+		{"member": member, "lesson": ["in", lessons or [""]]},
+		["name", "lesson", "status"],
+	)
+	changed = 0
+	# Each progress row's on_update/after_delete recalculates the enrollment;
+	# batching turns those N writes into one.
+	with batched_enrollment_updates():
+		if action == "complete":
+			existing_by_lesson = {row.lesson: row for row in existing}
+			for lesson in lessons:
+				row = existing_by_lesson.get(lesson)
+				if row and row.status == "Complete":
+					continue
+				if row:
+					doc = frappe.get_doc("LMS Course Progress", row.name)
+					doc.status = "Complete"
+					doc.scorm_content = ""
+					doc.save(ignore_permissions=True)
+				else:
+					frappe.get_doc(
+						{
+							"doctype": "LMS Course Progress",
+							"lesson": lesson,
+							"member": member,
+							"status": "Complete",
+						}
+					).insert(ignore_permissions=True)
+				changed += 1
+		else:
+			for row in existing:
+				frappe.delete_doc("LMS Course Progress", row.name, ignore_permissions=True, force=True)
+				changed += 1
+			if scope == "course":
+				update_enrollment(enrollment, {"current_lesson": None})
+
+	if changed:
+		if action == "complete":
+			note = _("Progress marked complete for {0} ({1} lessons).").format(scope_label, changed)
+		else:
+			note = _("Progress reset for {0} ({1} lessons). Quiz and assignment submissions were kept.").format(
+				scope_label, changed
+			)
+		_insert_member_note(member, note)
+
+	return {
+		"changed": changed,
+		"progress": frappe.db.get_value("LMS Enrollment", enrollment, "progress") or 0,
+		"notes": get_member_notes(member),
+	}
 
 
 def check_app_permission():
@@ -2986,7 +3224,7 @@ def get_certification_details(course: str) -> dict:
 
 @frappe.whitelist()
 def save_role(user: str, role: str, value: int):
-	frappe.only_for("Moderator")
+	frappe.only_for(MEMBER_ADMIN_ROLES)
 	if role not in LMS_ROLES:
 		frappe.throw(_("You do not have permission to modify this role."), frappe.PermissionError)
 
@@ -3008,7 +3246,7 @@ def save_role(user: str, role: str, value: int):
 
 
 def save_evaluator_role(user: str, value: int):
-	frappe.only_for("Moderator")
+	frappe.only_for(MEMBER_ADMIN_ROLES)
 	if cint(value):
 		if not frappe.db.exists("Has Role", {"parent": user, "role": "Batch Evaluator"}):
 			doc = frappe.new_doc("Has Role")

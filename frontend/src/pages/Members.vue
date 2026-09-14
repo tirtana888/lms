@@ -13,7 +13,12 @@
 		@load-more="fetchMembers()"
 	>
 		<template #actions>
-			<Button variant="solid" :label="__('New')" @click="openNewMember">
+			<Button
+				v-if="user.data?.is_moderator"
+				variant="solid"
+				:label="__('New')"
+				@click="openNewMember"
+			>
 				<template #prefix>
 					<span class="lucide-plus size-4" aria-hidden="true" />
 				</template>
@@ -297,7 +302,7 @@ watch(membersRevision, () => {
 // non-moderator was never going to see the results of. Mirrors QuizSubmissions.vue's
 // admin gate.
 onMounted(() => {
-	if (!user.data?.is_moderator) {
+	if (!user.data?.is_moderator && !user.data?.is_system_manager) {
 		router.push({ name: 'Home' })
 		return
 	}
@@ -331,12 +336,17 @@ const getActionOptions = (row: Member) => [
 		icon: 'lucide-pencil',
 		onClick: () => openEditMember(row),
 	},
-	{
-		label: __('Delete user'),
-		icon: 'lucide-trash-2',
-		theme: 'red',
-		onClick: () => openDeleteDialog(row),
-	},
+	// delete_member stays Moderator-only; a System Manager manages but can't delete here.
+	...(user.data?.is_moderator
+		? [
+				{
+					label: __('Delete user'),
+					icon: 'lucide-trash-2',
+					theme: 'red',
+					onClick: () => openDeleteDialog(row),
+				},
+		  ]
+		: []),
 ]
 
 const confirmDelete = async (close: () => void) => {

@@ -174,13 +174,122 @@
 						<div
 							v-for="row in overview.enrollments"
 							:key="row.course"
-							class="flex items-center gap-3 border-b border-outline-gray-1 py-3 text-p-sm last:border-0"
+							class="border-b border-outline-gray-1 text-p-sm last:border-0"
 						>
-							<span class="min-w-0 flex-1 truncate text-ink-gray-8">{{ row.course_title }}</span>
-							<div class="w-32 shrink-0">
-								<ProgressBar :progress="Math.round(row.progress ?? 0)" class="!mx-0" />
+							<div class="flex items-center gap-3 py-3">
+								<button
+									type="button"
+									class="flex min-w-0 flex-1 items-center gap-2 text-left"
+									:aria-expanded="Boolean(expandedCourses[row.course || ''])"
+									@click="toggleCourse(row.course)"
+								>
+									<span
+										class="lucide-chevron-right size-4 shrink-0 text-ink-gray-5 transition-transform"
+										:class="{ 'rotate-90': expandedCourses[row.course || ''] }"
+										aria-hidden="true"
+									/>
+									<span class="truncate text-ink-gray-8">{{ row.course_title }}</span>
+								</button>
+								<div class="w-32 shrink-0">
+									<ProgressBar :progress="Math.round(row.progress ?? 0)" class="!mx-0" />
+								</div>
+								<span class="w-10 shrink-0 text-right text-ink-gray-6">{{ Math.round(row.progress ?? 0) }}%</span>
+								<Dropdown :options="progressOptions(row.course, 'course', row.course, row.course_title)">
+									<Button
+										variant="ghost"
+										:aria-label="__('Progress actions for {0}').format(row.course_title)"
+									>
+										<template #icon>
+											<span class="lucide-more-horizontal size-4" aria-hidden="true" />
+										</template>
+									</Button>
+								</Dropdown>
 							</div>
-							<span class="w-10 shrink-0 text-right text-ink-gray-6">{{ Math.round(row.progress ?? 0) }}%</span>
+
+							<div v-if="expandedCourses[row.course || '']" class="pb-4 pl-6">
+								<div v-if="!courseOutlines[row.course || '']" class="text-p-sm text-ink-gray-5">
+									{{ __('Loading...') }}
+								</div>
+								<div
+									v-else-if="!courseOutlines[row.course || '']?.chapters.length"
+									class="text-p-sm text-ink-gray-5"
+								>
+									{{ __('This course has no lessons yet.') }}
+								</div>
+								<div v-else class="space-y-3">
+									<div
+										v-for="chapter in courseOutlines[row.course || '']?.chapters"
+										:key="chapter.name"
+										class="rounded-lg border border-outline-gray-2"
+									>
+										<div class="flex items-center gap-2 border-b border-outline-gray-1 bg-surface-gray-1 px-3 py-1.5">
+											<span class="min-w-0 flex-1 truncate text-p-sm-medium text-ink-gray-8">{{ chapter.title }}</span>
+											<span class="shrink-0 text-p-xs text-ink-gray-5">
+												{{ completedCount(chapter) }}/{{ chapter.lessons.length }}
+											</span>
+											<Dropdown :options="progressOptions(row.course, 'chapter', chapter.name, chapter.title)">
+												<Button
+													variant="ghost"
+													:aria-label="__('Progress actions for {0}').format(chapter.title)"
+												>
+													<template #icon>
+														<span class="lucide-more-horizontal size-4" aria-hidden="true" />
+													</template>
+												</Button>
+											</Dropdown>
+										</div>
+										<div
+											v-for="lesson in chapter.lessons"
+											:key="lesson.name"
+											class="flex items-start gap-2 border-b border-outline-gray-1 px-3 py-2 last:border-0"
+										>
+											<span
+												:class="lessonIcon(lesson.status)"
+												class="mt-0.5 size-4 shrink-0"
+												role="img"
+												:aria-label="lessonStatusLabel(lesson.status)"
+												:title="lessonStatusLabel(lesson.status)"
+											/>
+											<div class="min-w-0 flex-1">
+												<div class="truncate text-ink-gray-8">{{ lesson.title }}</div>
+												<div
+													v-if="lesson.quizzes.length || lesson.assignments.length"
+													class="mt-1 flex flex-wrap gap-1.5"
+												>
+													<Badge
+														v-for="quiz in lesson.quizzes"
+														:key="'quiz-' + quiz.name"
+														variant="subtle"
+														:theme="quiz.percentage == null ? 'gray' : quiz.passed ? 'green' : 'red'"
+													>
+														{{ __('Quiz') }}: {{ quiz.title }} ·
+														{{ quiz.percentage == null ? __('Not attempted') : Math.round(quiz.percentage) + '%' }}
+													</Badge>
+													<Badge
+														v-for="assignment in lesson.assignments"
+														:key="'assignment-' + assignment.name"
+														variant="subtle"
+														:theme="assignmentTheme(assignment.status)"
+													>
+														{{ __('Assignment') }}: {{ assignment.title }} ·
+														{{ assignment.status ? __(assignment.status) : __('Not submitted') }}
+													</Badge>
+												</div>
+											</div>
+											<Dropdown :options="progressOptions(row.course, 'lesson', lesson.name, lesson.title)">
+												<Button
+													variant="ghost"
+													:aria-label="__('Progress actions for {0}').format(lesson.title)"
+												>
+													<template #icon>
+														<span class="lucide-more-horizontal size-4" aria-hidden="true" />
+													</template>
+												</Button>
+											</Dropdown>
+										</div>
+									</div>
+								</div>
+							</div>
 						</div>
 					</div>
 				</div>
@@ -260,6 +369,7 @@ import PageHeader from '@/components/Layouts/PageHeader.vue'
 import SkeletonLoader from '@/components/SkeletonLoader.vue'
 import { notifyMembersChanged } from '@/stores/members'
 import { cleanError } from '@/utils'
+import { createDialog } from '@/utils/dialogs'
 import type { Breadcrumb, Resource, SessionUser } from '@/types'
 
 type MemberRow = {
@@ -283,6 +393,20 @@ type MemberOverviewRow = {
 }
 
 type MemberNote = { name: string; content: string; comment_by: string; creation: string }
+
+type ProgressScope = 'course' | 'chapter' | 'lesson'
+type QuizResult = { name: string; title: string; percentage: number | null; passed: boolean }
+type AssignmentResult = { name: string; title: string; status: string | null }
+type OutlineLesson = {
+	name: string
+	title: string
+	status: string | null
+	quizzes: QuizResult[]
+	assignments: AssignmentResult[]
+}
+type OutlineChapter = { name: string; title: string; lessons: OutlineLesson[] }
+type CourseOutline = { progress: number; chapters: OutlineChapter[] }
+type ProgressResult = { changed: number; progress: number; notes: MemberNote[] }
 
 type MemberOverview = {
 	last_login: string | null
@@ -312,13 +436,12 @@ const props = defineProps<{ memberID: string }>()
 const user = inject<SessionUser>('$user')!
 const route = useRoute()
 
-// A moderator-only page reached by a real URL — same gate as the rest of
-// member management (`frappe.only_for("Moderator")` on
-// get_member/get_member_overview/save_role, lms/lms/api.py).
+// A page reached by a real URL — same gate as the rest of member management
+// (MEMBER_ADMIN_ROLES on get_member/get_member_overview/save_role, lms/lms/api.py).
 const refusal = computed(() => {
 	if ((window as Window & { read_only_mode?: boolean }).read_only_mode)
 		return __('This site is in read-only mode.')
-	if (!user.data?.is_moderator)
+	if (!user.data?.is_moderator && !user.data?.is_system_manager)
 		return __('You are not permitted to manage members.')
 	return ''
 })
@@ -529,6 +652,137 @@ async function handleDeleteNote(name: string) {
 	} catch (err: any) {
 		toast.error(errorMessage(err, __('Unable to delete note')))
 	}
+}
+
+const expandedCourses = reactive<Record<string, boolean>>({})
+const courseOutlines = reactive<Record<string, CourseOutline | null>>({})
+const progressBusy = ref(false)
+
+async function loadCourseOutline(course: string) {
+	try {
+		courseOutlines[course] = await call('lms.lms.api.get_member_course_progress', {
+			member: props.memberID,
+			course,
+		})
+	} catch (err: any) {
+		expandedCourses[course] = false
+		toast.error(errorMessage(err, __('Unable to load course progress')))
+	}
+}
+
+function toggleCourse(course: string | undefined) {
+	if (!course) return
+	expandedCourses[course] = !expandedCourses[course]
+	if (expandedCourses[course] && !courseOutlines[course]) loadCourseOutline(course)
+}
+
+const completedCount = (chapter: OutlineChapter) =>
+	chapter.lessons.filter((lesson) => lesson.status === 'Complete').length
+
+function lessonIcon(status: string | null) {
+	if (status === 'Complete') return 'lucide-check-circle text-ink-green-3'
+	if (status) return 'lucide-circle-dashed text-ink-amber-3'
+	return 'lucide-circle text-ink-gray-4'
+}
+
+function lessonStatusLabel(status: string | null) {
+	if (status === 'Complete') return __('Completed')
+	if (status) return __('In progress')
+	return __('Not started')
+}
+
+function assignmentTheme(status: string | null) {
+	if (status === 'Pass') return 'green'
+	if (status === 'Fail') return 'red'
+	if (status) return 'orange'
+	return 'gray'
+}
+
+async function runProgressAction(
+	course: string | undefined,
+	action: 'complete' | 'reset',
+	scope: ProgressScope,
+	target: string | undefined
+) {
+	if (!course || !target || progressBusy.value) return
+	progressBusy.value = true
+	try {
+		const result: ProgressResult = await call('lms.lms.api.set_member_progress', {
+			member: props.memberID,
+			course,
+			action,
+			scope,
+			target,
+		})
+		const enrollment = overviewFetch.data?.enrollments.find((row) => row.course === course)
+		if (enrollment) enrollment.progress = result.progress
+		if (overviewFetch.data) overviewFetch.data.notes = result.notes
+		if (courseOutlines[course]) await loadCourseOutline(course)
+		if (!result.changed) toast.success(__('Nothing to change'))
+		else if (action === 'complete')
+			toast.success(__('{0} lessons marked complete').format(result.changed))
+		else toast.success(__('{0} lessons reset').format(result.changed))
+	} catch (err: any) {
+		toast.error(errorMessage(err, __('Unable to update progress')))
+	} finally {
+		progressBusy.value = false
+	}
+}
+
+function confirmReset(
+	course: string | undefined,
+	scope: ProgressScope,
+	target: string | undefined,
+	label: string | undefined
+) {
+	createDialog({
+		title: __('Reset progress?'),
+		message: __(
+			'Progress for "{0}" will be cleared. Quiz and assignment submissions are kept, and this is recorded in the member notes.'
+		).format(label || ''),
+		actions: [
+			{
+				label: __('Reset'),
+				theme: 'red',
+				variant: 'solid',
+				onClick(close: () => void) {
+					close()
+					runProgressAction(course, 'reset', scope, target)
+				},
+			},
+		],
+	})
+}
+
+function progressOptions(
+	course: string | undefined,
+	scope: ProgressScope,
+	target: string | undefined,
+	label: string | undefined
+) {
+	const markLabel = {
+		course: __('Mark course complete'),
+		chapter: __('Mark chapter complete'),
+		lesson: __('Mark lesson complete'),
+	}[scope]
+	const resetLabel = {
+		course: __('Reset course progress'),
+		chapter: __('Reset chapter progress'),
+		lesson: __('Reset lesson progress'),
+	}[scope]
+	return [
+		{
+			label: markLabel,
+			icon: 'lucide-check-circle',
+			onClick: () => runProgressAction(course, 'complete', scope, target),
+		},
+		{
+			label: resetLabel,
+			icon: 'lucide-rotate-ccw',
+			theme: 'red',
+			onClick: () => confirmReset(course, scope, target, label),
+		},
+	]
 }
 
 const saveRoles = async () => {
