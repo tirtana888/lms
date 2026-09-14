@@ -59,6 +59,29 @@ def get_lms_route(path=""):
 	return f"{base}/{path.lstrip('/')}"
 
 
+def get_lms_home_page(user):
+	"""Hook for `get_website_user_home_page`: where a logged-in user lands
+	after login (or after visiting "/") with nothing else deciding it.
+
+	Wires up `LMS Settings.default_home` ("Make LMS the default home") - a
+	toggle that already existed in the doctype but nothing ever read, so it
+	did nothing regardless of its value. Without it, every login fell
+	through Frappe's own last-resort default ("me"), landing on the
+	generic Desk-style My Account page with no obvious way back to the LMS
+	itself - "My Account" gives no hint that Learning lives one click away
+	under the avatar menu.
+
+	Returning None (Guest, or the toggle off) lets Frappe's own resolution
+	continue exactly as before - this only ever adds a destination, never
+	removes one.
+	"""
+	if user == "Guest":
+		return None
+	if not frappe.db.get_single_value("LMS Settings", "default_home"):
+		return None
+	return get_lms_path()
+
+
 def extend_bootinfo(bootinfo: dict):
 	bootinfo["lms_path"] = get_lms_path()
 

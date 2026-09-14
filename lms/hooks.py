@@ -60,6 +60,10 @@ web_include_js = []
 # 	"Role": "home_page"
 # }
 
+# Sends a logged-in user straight to the LMS instead of Frappe's own
+# fallback ("My Account") when LMS Settings.default_home is on.
+get_website_user_home_page = "lms.lms.utils.get_lms_home_page"
+
 # Generators
 # ----------
 
