@@ -98,6 +98,24 @@ def login_via_google(code: str, state: str):
 
 	login_oauth_user(info, provider="google", state=state)
 
+	# login_oauth_user's own redirect_post_login hardcodes "/me" for a
+	# non-desk user whenever the OAuth state carried no explicit
+	# redirect-to (the normal case: the button on /login sends none) - it
+	# never consults get_home_page(), so LMS Settings.default_home had no
+	# effect on Google sign-in even though it correctly redirects the
+	# standard email/password login form, which does go through
+	# get_home_page(). Only step in when nothing more specific was already
+	# decided (a real redirect-to still wins), and only when the toggle
+	# actually points somewhere else - otherwise get_home_page() itself
+	# returns "me" and this is a no-op, matching today's behaviour exactly.
+	current = (frappe.local.response.get("location") or "").rstrip("/")
+	if current.endswith("/me"):
+		from frappe.website.utils import get_home_page
+
+		home = get_home_page()
+		if home and home != "me":
+			frappe.local.response["location"] = frappe.utils.get_url(f"/{home}")
+
 
 @frappe.whitelist(allow_guest=True)  # nosemgrep: frappe-semgrep-rules.rules.security.guest-whitelisted-method
 def sign_up(email: str, full_name: str, verify_terms: bool, user_category: str):
