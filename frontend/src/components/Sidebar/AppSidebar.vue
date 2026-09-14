@@ -355,6 +355,7 @@ const addKeyboardShortcut = () => {
 		if (
 			e.key === 'k' &&
 			(e.ctrlKey || e.metaKey) &&
+			!e.repeat &&
 			!e.target.classList.contains('ProseMirror')
 		) {
 			toggleCommandPalette()
