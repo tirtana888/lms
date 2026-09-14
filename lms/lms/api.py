@@ -2053,6 +2053,11 @@ def set_member_progress(member: str, course: str, action: str, scope: str, targe
 		lesson_title = frappe.db.get_value("Course Lesson", target, "title") or target
 		scope_label = _("lesson {0} in {1}").format(lesson_title, course_title)
 
+	# A Lesson Reference can outlive its Course Lesson; inserting progress for it
+	# would fail link validation and abort the whole action.
+	existing_lessons = set(frappe.get_all("Course Lesson", {"name": ["in", lessons or [""]]}, pluck="name"))
+	lessons = [lesson for lesson in lessons if lesson in existing_lessons]
+
 	from lms.lms.doctype.lms_enrollment.lms_enrollment import batched_enrollment_updates, update_enrollment
 
 	existing = frappe.get_all(
