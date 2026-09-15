@@ -10,6 +10,7 @@ from frappe.model.document import Document
 from frappe.utils import cint, format_date, format_time, get_datetime, nowdate
 
 from lms.lms.doctype.lms_batch.lms_batch import authenticate
+from lms.lms.email_notifications import send_notification_email
 
 
 class LMSLiveClass(Document):
@@ -181,11 +182,12 @@ def send_mail(live_class, student):
 		"batch_name": live_class.batch_name,
 	}
 
-	frappe.sendmail(
-		recipients=student.member,
-		subject=subject,
-		template=template,
-		args=args,
+	send_notification_email(
+		"live_class_reminder",
+		student.member,
+		template,
+		args,
+		default_subject=subject,
 		header=[_(f"Class Reminder: {live_class.title}"), "orange"],
 	)
 

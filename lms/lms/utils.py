@@ -37,6 +37,7 @@ from frappe.utils.html_utils import sanitize_html
 from pypika import Case
 from pypika import functions as fn
 
+from lms.lms.email_notifications import send_notification_email
 from lms.lms.doctype.lms_enrollment.lms_enrollment import (
 	update_enrollment,
 	update_program_progress,
@@ -611,11 +612,12 @@ def notify_mentions_via_email(doc: Document, topic: dict):
 	}
 
 	for recipient in recipients:
-		frappe.sendmail(
-			recipients=recipient,
-			subject=subject,
-			template=template,
-			args=args,
+		send_notification_email(
+			"mention_notification",
+			recipient,
+			template,
+			args,
+			default_subject=subject,
 			header=[subject, "green"],
 			retry=3,
 		)

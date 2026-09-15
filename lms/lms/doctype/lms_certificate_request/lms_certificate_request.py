@@ -20,6 +20,7 @@ from frappe.utils import (
 	nowtime,
 )
 
+from lms.lms.email_notifications import send_notification_email
 from lms.lms.utils import (
 	PRIVILEGED_ROLES,
 	convert_from_system_timezone,
@@ -168,12 +169,13 @@ class LMSCertificateRequest(Document):
 				"evaluator": self.evaluator_name,
 			}
 
-			frappe.sendmail(
-				recipients=[self.member],
+			send_notification_email(
+				"certificate_request_notification",
+				[self.member],
+				template,
+				args,
+				default_subject=subject,
 				cc=[self.evaluator],
-				subject=subject,
-				template=template,
-				args=args,
 				header=[subject, "green"],
 				retry=3,
 			)

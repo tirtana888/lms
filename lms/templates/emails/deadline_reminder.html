@@ -1,0 +1,27 @@
+<p>
+    {{ _("Dear ") }} {{ student_name }},
+</p>
+<br>
+<p>
+    {% if days_left == 1 %}
+    {{ _("This is a reminder that your deadline for {0} is tomorrow.").format(item_title) }}
+    {% else %}
+    {{ _("This is a reminder that your deadline for {0} is in {1} days.").format(item_title, days_left) }}
+    {% endif %}
+</p>
+<br>
+<p>
+    <b>{{ _("Course:") }}</b> {{ course_title }}
+</p>
+<br>
+<p>
+    <a href="{{ course_url }}">👉 {{ _("Continue where you left off") }}</a>
+</p>
+<br>
+<p>
+    {{ _("If you have any questions or require assistance, feel free to contact us.") }}
+</p>
+<br>
+<p>
+    {{ _("Best Regards") }}
+</p>

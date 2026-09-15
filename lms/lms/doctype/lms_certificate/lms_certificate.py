@@ -3,11 +3,12 @@
 
 import frappe
 from frappe import _
-from frappe.email.doctype.email_template.email_template import get_email_template
 from frappe.model.document import Document
 from frappe.model.naming import make_autoname
 from frappe.utils import nowdate
 from frappe.utils.telemetry import capture
+
+from lms.lms.email_notifications import send_notification_email
 
 
 class LMSCertificate(Document):
@@ -31,8 +32,6 @@ class LMSCertificate(Document):
 
 	def send_mail(self):
 		subject = _("Congratulations on getting certified!")
-		template = "certification"
-		custom_template = frappe.db.get_single_value("LMS Settings", "certification_template")
 
 		args = {
 			"member_name": self.member_name,
@@ -44,16 +43,12 @@ class LMSCertificate(Document):
 			"template": self.template,
 		}
 
-		if custom_template:
-			email_template = get_email_template(custom_template, args)
-			subject = email_template.get("subject")
-			content = email_template.get("message")
-		frappe.sendmail(
-			recipients=self.member,
-			subject=subject,
-			template=template if not custom_template else None,
-			content=content if custom_template else None,
-			args=args,
+		send_notification_email(
+			"certification",
+			self.member,
+			"certification",
+			args,
+			default_subject=subject,
 			header=[subject, "green"],
 		)
 

@@ -9,6 +9,8 @@ from frappe.desk.doctype.notification_log.notification_log import make_notificat
 from frappe.model.document import Document
 from frappe.utils import cint, flt, today
 
+from lms.lms.email_notifications import send_notification_email
+
 from ...utils import (
 	generate_slug,
 	get_average_rating,
@@ -129,16 +131,20 @@ class LMSCourse(Document):
 		}
 
 		for user in interested_users:
-			args["first_name"] = frappe.db.get_value("User", user.user, "first_name")
-			email_args = frappe._dict(
+			user_args = {**args, "first_name": frappe.db.get_value("User", user.user, "first_name")}
+			frappe.enqueue(
+				send_notification_email,
+				queue="short",
+				timeout=300,
+				is_async=True,
+				event_key="course_interest",
 				recipients=user.user,
-				subject=subject,
+				default_template="lms_course_interest",
+				args=user_args,
+				default_subject=subject,
 				header=[subject, "green"],
-				template="lms_course_interest",
-				args=args,
 				now=True,
 			)
-			frappe.enqueue(method=frappe.sendmail, queue="short", timeout=300, is_async=True, **email_args)
 			frappe.db.set_value("LMS Course Interest", user.name, "email_sent", True)
 
 	def autoname(self):
@@ -191,12 +197,13 @@ def send_email_notification_for_published_courses(courses):
 			"course_url": frappe.utils.get_url(get_lms_route(f"courses/{course.name}")),
 		}
 
-		frappe.sendmail(
-			recipients=instructors,
+		send_notification_email(
+			"published_course",
+			instructors,
+			template,
+			args,
+			default_subject=subject,
 			bcc=students,
-			subject=subject,
-			template=template,
-			args=args,
 		)
 		frappe.db.set_value("LMS Course", course.name, "notification_sent", 1)
 

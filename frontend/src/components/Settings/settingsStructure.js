@@ -1,6 +1,7 @@
 import { markRaw } from 'vue'
 import Categories from '@/components/Settings/Categories.vue'
 import EmailTemplatePage from '@/components/Settings/EmailTemplate/EmailTemplatePage.vue'
+import EmailNotificationList from '@/components/Settings/EmailNotifications/EmailNotificationList.vue'
 import EmailConfig from '@/components/Settings/EmailAccount/EmailConfig.vue'
 import BrandSettings from '@/components/Settings/BrandSettings.vue'
 import PaymentGateways from '@/components/Settings/PaymentGateways.vue'
@@ -289,6 +290,13 @@ export const settingsStructure = [
 					'Manage the email templates for your learning system',
 				icon: 'lucide-mail-plus',
 				template: markRaw(EmailTemplatePage),
+			},
+			{
+				label: 'Notifications',
+				description:
+					'Turn individual notification emails on or off, and swap in your own template for any of them',
+				icon: 'lucide-bell',
+				template: markRaw(EmailNotificationList),
 			},
 		],
 	},

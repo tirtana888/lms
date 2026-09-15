@@ -12,6 +12,7 @@ from frappe.desk.doctype.notification_log.notification_log import make_notificat
 from frappe.model.document import Document
 from frappe.utils import add_days, cint, format_datetime, get_time, nowdate
 
+from lms.lms.email_notifications import send_notification_email
 from lms.lms.utils import (
 	format_timezone,
 	generate_slug,
@@ -199,12 +200,13 @@ def send_email_notification_for_published_batch(batch):
 		"batch_url": frappe.utils.get_url(get_lms_route(f"batches/{batch.name}")),
 	}
 
-	frappe.sendmail(
-		recipients=instructors,
+	send_notification_email(
+		"published_batch",
+		instructors,
+		template,
+		args,
+		default_subject=subject,
 		bcc=students,
-		subject=subject,
-		template=template,
-		args=args,
 	)
 	frappe.db.set_value("LMS Batch", batch.name, "notification_sent", 1)
 
@@ -489,11 +491,12 @@ def send_mail(batch, student):
 		"evaluation_end_date": batch.evaluation_end_date,
 	}
 
-	frappe.sendmail(
-		recipients=student.member,
-		subject=subject,
-		template=template,
-		args=args,
+	send_notification_email(
+		"batch_start_reminder",
+		student.member,
+		template,
+		args,
+		default_subject=subject,
 		header=[_(f"Batch Start Reminder: {batch.title}"), "orange"],
 	)
 

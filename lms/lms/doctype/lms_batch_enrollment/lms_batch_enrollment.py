@@ -5,8 +5,9 @@ import json
 
 import frappe
 from frappe import _
-from frappe.email.doctype.email_template.email_template import get_email_template
 from frappe.model.document import Document
+
+from lms.lms.email_notifications import send_notification_email
 
 
 class LMSBatchEnrollment(Document):
@@ -182,10 +183,6 @@ def send_mail(doc):
 	)
 
 	subject = _("Enrollment Confirmation for {0}").format(batch.title)
-	template = "batch_confirmation"
-	custom_template = batch.confirmation_email_template or frappe.db.get_single_value(
-		"LMS Settings", "batch_confirmation_template"
-	)
 
 	args = {
 		"title": batch.title,
@@ -196,17 +193,13 @@ def send_mail(doc):
 		"name": batch.name,
 	}
 
-	if custom_template:
-		email_template = get_email_template(custom_template, args)
-		subject = email_template.get("subject")
-		content = email_template.get("message")
-
-	frappe.sendmail(
-		recipients=doc.member,
-		subject=subject,
-		template=template if not custom_template else None,
-		content=content if custom_template else None,
-		args=args,
+	send_notification_email(
+		"batch_confirmation",
+		doc.member,
+		"batch_confirmation",
+		args,
+		default_subject=subject,
+		override_template=batch.confirmation_email_template,
 		header=[_(batch.title), "green"],
 		retry=3,
 	)

@@ -3,11 +3,11 @@
 
 import frappe
 from frappe import _
-from frappe.email.doctype.email_template.email_template import get_email_template
 from frappe.model.document import Document
 from frappe.utils import add_days, flt, nowdate
 from pypika import functions as fn
 
+from lms.lms.email_notifications import send_notification_email
 from lms.lms.utils import get_lms_route
 
 
@@ -142,8 +142,6 @@ def is_batch_sold_out(payment):
 
 def send_mail(payment):
 	subject = _("Complete Your Enrollment - Don't miss out!")
-	template = "payment_reminder"
-	custom_template = frappe.db.get_single_value("LMS Settings", "payment_reminder_template")
 
 	args = {
 		"billing_name": payment.billing_name,
@@ -156,11 +154,6 @@ def send_mail(payment):
 		),
 	}
 
-	if custom_template:
-		email_template = get_email_template(custom_template, args)
-		subject = email_template.get("subject")
-		content = email_template.get("message")
-
 	instructors = frappe.get_all(
 		"Course Instructor",
 		{
@@ -170,13 +163,13 @@ def send_mail(payment):
 		pluck="instructor",
 	)
 
-	frappe.sendmail(
-		recipients=payment.member,
+	send_notification_email(
+		"payment_reminder",
+		payment.member,
+		"payment_reminder",
+		args,
+		default_subject=subject,
 		cc=instructors,
-		subject=subject,
-		template=template if not custom_template else None,
-		content=content if custom_template else None,
-		args=args,
 		header=[subject, "green"],
 		retry=3,
 	)

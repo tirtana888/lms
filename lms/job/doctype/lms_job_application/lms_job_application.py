@@ -5,6 +5,8 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
+from lms.lms.email_notifications import send_notification_email
+
 
 class LMSJobApplication(Document):
 	def validate(self):
@@ -40,11 +42,12 @@ class LMSJobApplication(Document):
 					"file_url": self.resume,
 				},
 			)
-			frappe.sendmail(
-				recipients=company_email,
-				subject=subject,
-				template="job_application",
-				args=args,
+			send_notification_email(
+				"job_application",
+				company_email,
+				"job_application",
+				args,
+				default_subject=subject,
 				attachments=[
 					{
 						"fname": resume.file_name,

@@ -7,6 +7,7 @@ from frappe.model.document import Document
 from frappe.utils import add_months, get_link_to_form, getdate, validate_url
 from frappe.utils.user import get_system_managers
 
+from lms.lms.email_notifications import send_notification_email
 from lms.lms.utils import generate_slug, validate_image
 
 
@@ -45,11 +46,12 @@ def report(job: str, reason: str):
 		"user": user,
 		"reason": reason,
 	}
-	frappe.sendmail(
-		recipients=system_managers,
-		subject=subject,
+	send_notification_email(
+		"job_report",
+		system_managers,
+		"job_report",
+		args,
+		default_subject=subject,
 		header=[subject, "green"],
-		template="job_report",
-		args=args,
 		now=True,
 	)

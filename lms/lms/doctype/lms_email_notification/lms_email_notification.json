@@ -1,0 +1,122 @@
+{
+ "actions": [],
+ "autoname": "field:event_key",
+ "creation": "2026-09-15 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "label",
+  "event_key",
+  "category",
+  "column_break_1",
+  "enabled",
+  "description",
+  "section_break_1",
+  "custom_template",
+  "default_template"
+ ],
+ "fields": [
+  {
+   "fieldname": "label",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Label",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "event_key",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Event Key",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "category",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Category",
+   "options": "Course & Batch\nCertificates & Evaluations\nLive Classes\nDeadlines\nCommunity\nJobs",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "description": "Some events (course/batch published) are also gated by a separate setting in System Configuration that also controls an in-app alternative - turning this off here only stops the email, not that setting.",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Send this email"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_1",
+   "fieldtype": "Section Break",
+   "label": "Content"
+  },
+  {
+   "description": "Leave empty to use the built-in wording shown in Default Template.",
+   "fieldname": "custom_template",
+   "fieldtype": "Link",
+   "label": "Custom Template",
+   "options": "Email Template"
+  },
+  {
+   "description": "The Jinja template file this event falls back to when no Custom Template is set - for reference only, not editable here.",
+   "fieldname": "default_template",
+   "fieldtype": "Data",
+   "label": "Default Template (built-in)",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-09-15 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "LMS",
+ "name": "LMS Email Notification",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Moderator",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "category",
+ "sort_order": "ASC",
+ "states": [],
+ "title_field": "label",
+ "track_changes": 1
+}
