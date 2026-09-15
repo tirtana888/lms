@@ -1,6 +1,6 @@
 <template>
 	<PageHeader v-if="!fromLesson" :breadcrumbs="breadcrumbs" />
-	<div class="overflow-hidden h-[calc(100vh-3.2rem)]">
+	<div class="h-auto overflow-visible md:h-[calc(100vh-3.2rem)] md:overflow-hidden">
 		<Assignment
 			:key="`${assignmentID}-${submissionName}`"
 			:assignmentID="assignmentID"

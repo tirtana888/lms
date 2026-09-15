@@ -1,12 +1,49 @@
 <template>
 	<div
 		v-if="assignment.data"
-		class="grid grid-cols-2 h-full"
+		class="grid grid-cols-1 md:grid-cols-2 h-full"
 		:class="{ 'border rounded-lg overflow-auto': !showTitle }"
 	>
+		<!-- Only shown under md: - on a phone, the question and the submission
+		     form no longer fit side by side (that's the bug this replaces), and
+		     a long question pushed the form far below the fold if simply
+		     stacked. Switching between them keeps either one reachable in one
+		     tap instead of a scroll of unpredictable length. Desktop keeps
+		     showing both at once, unaffected - the tab state is read below but
+		     never hides anything past this breakpoint. -->
+		<div class="col-span-full flex gap-1 border-b p-2 md:hidden">
+			<button
+				type="button"
+				class="flex-1 rounded-md px-3 py-1.5 text-sm font-medium"
+				:class="
+					mobileTab === 'question'
+						? 'bg-surface-gray-3 text-ink-gray-9'
+						: 'text-ink-gray-6'
+				"
+				@click="mobileTab = 'question'"
+			>
+				{{ __('Assignment') }}
+			</button>
+			<button
+				type="button"
+				class="flex-1 rounded-md px-3 py-1.5 text-sm font-medium"
+				:class="
+					mobileTab === 'submission'
+						? 'bg-surface-gray-3 text-ink-gray-9'
+						: 'text-ink-gray-6'
+				"
+				@click="mobileTab = 'submission'"
+			>
+				{{ __('Submission') }}
+			</button>
+		</div>
+
 		<div
-			class="border-e p-5 overflow-y-auto h-[calc(100vh-3.2rem)]"
-			:class="{ 'h-full': !showTitle }"
+			class="p-5 overflow-y-auto h-auto md:h-[calc(100vh-3.2rem)] md:border-e"
+			:class="[
+				{ 'md:h-full': !showTitle },
+				mobileTab === 'question' ? '' : 'hidden md:block',
+			]"
 		>
 			<div v-if="showTitle" class="text-lg-semibold mb-5 text-ink-gray-9">
 				<div v-if="submissionName === 'new'">
@@ -25,7 +62,10 @@
 			></div>
 		</div>
 
-		<div class="flex flex-col overflow-y-auto">
+		<div
+			class="flex-col overflow-y-auto"
+			:class="mobileTab === 'submission' ? 'flex' : 'hidden md:flex'"
+		>
 			<div class="p-5 space-y-5">
 				<div
 					v-if="scheduleBlocked"
@@ -257,6 +297,9 @@ import { getScheduleBlockReason } from '@/utils/schedule'
 const answer = ref(null)
 const attachment = ref(null)
 const comments = ref(null)
+// Only ever read below md: - the desktop 2-column layout ignores it and
+// always shows both panels.
+const mobileTab = ref('question')
 const router = useRouter()
 const user = inject('$user')
 const isDirty = ref(false)
