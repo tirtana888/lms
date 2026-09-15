@@ -134,3 +134,4 @@ lms.patches.v2_0.set_question_marks_from_quizzes #05-09-2026
 lms.patches.v2_0.seed_email_notifications #15-09-2026
 lms.patches.v2_0.seed_drip_unlock_notification #16-09-2026
 lms.patches.v2_0.backfill_drip_notification_log #16-09-2026
+lms.patches.v2_0.seed_default_email_templates #16-09-2026

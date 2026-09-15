@@ -177,9 +177,19 @@ def send_notification_email(
 
 	template_override = override_template or settings.custom_template
 	if template_override:
-		from frappe.email.doctype.email_template.email_template import get_email_template
-
-		email_template = get_email_template(template_override, args)
+		# Not the whitelisted get_email_template() wrapper: it calls
+		# doc.check_permission("read") against frappe.session.user, and Email
+		# Template only grants read to Desk User/System Manager (confirmed
+		# against the vendored doctype JSON) - every LMS role here (LMS
+		# Student included) has desk_access=0. Plenty of these send sites run
+		# inside a hook triggered by the student's own action (enrolling in a
+		# batch, applying for a job, ...), so that check would throw and the
+		# email - sometimes the whole triggering action - would fail the
+		# moment any admin sets a custom template. Sending a notification is
+		# a privileged, system-level operation regardless of who happens to
+		# be logged in when the trigger fires, so it reads the template
+		# directly instead of through the permission-gated wrapper.
+		email_template = frappe.get_doc("Email Template", template_override).get_formatted_email(args)
 		frappe.sendmail(
 			recipients=recipients,
 			subject=email_template.get("subject") or default_subject,
