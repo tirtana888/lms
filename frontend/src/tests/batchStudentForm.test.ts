@@ -209,8 +209,8 @@ describe('BatchStudentForm as a route', () => {
 		getCachedResourceMock.mockReset()
 		getCachedResourceMock.mockReturnValue(null)
 		openSettingsMock.mockReset()
-		// openSettings reports whether the dialog is actually mounted; the form
-		// only leaves for it when it is. Desktop is the default here.
+		// openSettings reports whether it actually navigated to Settings; the
+		// form only leaves for it when it did. Desktop is the default here.
 		openSettingsMock.mockReturnValue(true)
 		updateOnboardingStepMock.mockReset()
 		toastMock.success.mockReset()

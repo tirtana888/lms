@@ -24,8 +24,8 @@ vi.mock('frappe-ui', () => ({
 
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
 
-// The palette reads roles to decide which category rows to show, and the
-// settings store to decide whether the Settings row can do anything.
+// The palette reads roles to decide which category rows to show, including
+// the Settings row.
 vi.mock('@/stores/user', () => ({
 	usersStore: () => ({ userResource: { data: { is_moderator: true } } }),
 }))
@@ -46,8 +46,6 @@ vi.mock('@/utils', () => ({
 
 vi.mock('@/stores/settings', () => ({
 	useSettings: () => ({
-		isSettingsOpen: false,
-		isSettingsMounted: true,
 		// The palette filters its rows by these flags as well as by the sidebar.
 		sidebarSettings: { data: null },
 		loadSidebarSettings: vi.fn(async () => null),

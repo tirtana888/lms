@@ -58,10 +58,6 @@
 			</template>
 		</Dropdown>
 	</div>
-	<SettingsModal
-		v-if="userResource.data?.is_moderator"
-		v-model="showSettingsModal"
-	/>
 </template>
 
 <script setup>
@@ -72,11 +68,10 @@ import { convertToTitleCase } from '@/utils'
 import { toggleTheme, theme } from '@/utils/theme'
 import { usersStore } from '@/stores/user'
 import { useSettings } from '@/stores/settings'
-import { h, watch, ref, computed } from 'vue'
+import { h, computed } from 'vue'
 import { createDialog } from '@/utils/dialogs'
 import FrappeCloudIcon from '@/components/Icons/FrappeCloudIcon.vue'
 import LMSLogo from '@/components/Icons/LMSLogo.vue'
-import SettingsModal from '@/components/Settings/Settings.vue'
 import { Moon, Sun } from 'lucide-vue-next'
 import { safeUrl } from '@/utils/safeUrl'
 import { openExternal } from '@/utils/openExternal'
@@ -86,7 +81,6 @@ const { logout, branding } = sessionStore()
 let { userResource } = usersStore()
 const settingsStore = useSettings()
 let { isLoggedIn } = sessionStore()
-const showSettingsModal = ref(false)
 const frappeCloudBaseEndpoint = '#'
 const $dialog = createDialog
 
@@ -144,13 +138,6 @@ const appMenuItems = computed(() => {
 	}))
 })
 
-watch(
-	() => settingsStore.isSettingsOpen,
-	(value) => {
-		showSettingsModal.value = value
-	}
-)
-
 const userDropdownOptions = computed(() => {
 	return [
 		{
@@ -190,7 +177,7 @@ const userDropdownOptions = computed(() => {
 					icon: 'lucide-settings',
 					label: __('Settings'),
 					onClick: () => {
-						settingsStore.isSettingsOpen = true
+						router.push({ name: 'Settings' })
 					},
 					condition: () => {
 						return userResource.data?.is_moderator

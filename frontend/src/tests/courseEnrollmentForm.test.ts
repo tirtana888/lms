@@ -185,8 +185,8 @@ describe('CourseEnrollmentForm as a route', () => {
 		getCachedListResourceMock.mockReset()
 		getCachedListResourceMock.mockReturnValue(null)
 		openSettingsMock.mockReset()
-		// openSettings reports whether the dialog is actually mounted; the form
-		// only leaves for it when it is. Desktop is the default here.
+		// openSettings reports whether it actually navigated to Settings; the
+		// form only leaves for it when it did. Desktop is the default here.
 		openSettingsMock.mockReturnValue(true)
 		Object.defineProperty(window, 'innerWidth', {
 			value: 1024,

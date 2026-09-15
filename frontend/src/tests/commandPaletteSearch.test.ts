@@ -37,8 +37,8 @@ vi.mock('vue-router', () => ({
 	useRouter: () => ({ push, replace: vi.fn() }),
 }))
 
-// The palette reads roles to decide which category rows to show, which page a
-// program hit opens, and — with the settings store — whether Settings can act.
+// The palette reads roles to decide which category rows to show and which
+// page a program hit opens.
 const user = { data: {} as Record<string, unknown> }
 vi.mock('@/stores/user', () => ({ usersStore: () => ({ userResource: user }) }))
 vi.mock('@/utils', () => ({
@@ -58,8 +58,6 @@ vi.mock('@/utils', () => ({
 
 vi.mock('@/stores/settings', () => ({
 	useSettings: () => ({
-		isSettingsOpen: false,
-		isSettingsMounted: true,
 		// The palette filters its rows by these flags as well as by the sidebar.
 		sidebarSettings: { data: null },
 		loadSidebarSettings: vi.fn(async () => null),

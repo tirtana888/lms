@@ -16,6 +16,11 @@ export const routes = [
 		component: () => import('@/pages/Dashboard.vue'),
 	},
 	{
+		path: '/settings/:tab?',
+		name: 'Settings',
+		component: () => import('@/pages/Settings/SettingsPage.vue'),
+	},
+	{
 		path: '/courses',
 		name: 'Courses',
 		component: () => import('@/pages/Courses/Courses.vue'),

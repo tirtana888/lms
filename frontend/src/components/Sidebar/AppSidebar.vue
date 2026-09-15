@@ -298,13 +298,7 @@ const showPageModal = ref(false)
 const isModerator = ref(false)
 const isInstructor = ref(false)
 const pageToEdit = ref(null)
-const {
-	sidebarSettings,
-	activeTab,
-	isSettingsOpen,
-	programs,
-	loadSidebarSettings,
-} = useSettings()
+const { sidebarSettings, programs, loadSidebarSettings } = useSettings()
 const settingsStore = useSettings()
 const showOnboarding = ref(false)
 const showIntermediateModal = ref(false)
@@ -494,8 +488,7 @@ const steps = reactive([
 		completed: false,
 		onClick: () => {
 			minimize.value = true
-			activeTab.value = 'Members'
-			isSettingsOpen.value = true
+			router.push({ name: 'Settings', params: { tab: 'Members' } })
 		},
 	},
 	{

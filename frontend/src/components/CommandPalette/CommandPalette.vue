@@ -518,10 +518,11 @@ const browseGroups = computed<PaletteGroup[]>(() => {
 	return groups
 })
 
-/** Settings is a dialog owned by the desktop sidebar and open to moderators
- * only; on a phone nothing listens to the flag, so the row would do nothing. */
+/** CommandPalette itself is only ever mounted from the desktop sidebar
+ * (AppSidebar), so this is already moderator+desktop-only without a separate
+ * viewport check. */
 const accountItems = computed<PaletteItem[]>(() => {
-	if (!userResource.data?.is_moderator || !settingsStore.isSettingsMounted) {
+	if (!userResource.data?.is_moderator) {
 		return []
 	}
 	return [
@@ -529,7 +530,7 @@ const accountItems = computed<PaletteItem[]>(() => {
 			title: __('Settings'),
 			icon: 'lucide-settings',
 			perform: () => {
-				settingsStore.isSettingsOpen = true
+				router.push({ name: 'Settings' })
 			},
 		},
 	]

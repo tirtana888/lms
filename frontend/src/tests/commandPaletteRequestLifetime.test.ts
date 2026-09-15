@@ -47,8 +47,6 @@ vi.mock('@/utils', () => ({
 
 vi.mock('@/stores/settings', () => ({
 	useSettings: () => ({
-		isSettingsOpen: false,
-		isSettingsMounted: false,
 		sidebarSettings: { data: null },
 		loadSidebarSettings: vi.fn(async () => null),
 	}),

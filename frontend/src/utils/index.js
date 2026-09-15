@@ -1,4 +1,6 @@
 import { call, toast } from 'frappe-ui'
+import router from '@/router'
+import { MOBILE_BREAKPOINT } from '@/utils/composables'
 import { Quiz } from '@/utils/quiz'
 import { Program } from '@/utils/program'
 import { Assignment } from '@/utils/assignment'
@@ -912,24 +914,25 @@ export const createLMSCategory = (name) => {
 		})
 }
 
-// Settings is the desktop dialog, mounted only inside the sidebar's
-// UserDropdown — this branch deliberately left the phone no settings pages. So
-// on a phone the flag below reached nothing, and the `close()` above it threw
-// away the half-filled form the user was standing in for a dialog that never
-// arrived. Say so instead, and leave the form where it is.
+// Settings has its own route now, but mobile still gets its own dedicated
+// settings UI (MobileYou.vue/SettingsRowList) rather than this desktop-shaped
+// tabbed page — navigating there on a phone would show the wrong thing, not
+// just a smaller version of the right thing. Say so instead of navigating,
+// and leave the form where it is.
 // Returns whether Settings actually opened, so a caller that closes itself
 // separately can stay put when it did not.
 export const openSettings = (category, close = null) => {
-	const settingsStore = useSettings()
-	if (!settingsStore.isSettingsMounted) {
+	// A one-shot check at click time, not a live-reactive binding, so this
+	// reads the breakpoint directly rather than pulling in useScreenSize()'s
+	// onMounted/onUnmounted resize listener outside a component setup context.
+	if (window.innerWidth < MOBILE_BREAKPOINT) {
 		toast.error(__('Settings is only available on a larger screen.'))
 		return false
 	}
 	if (close) {
 		close()
 	}
-	settingsStore.activeTab = category
-	settingsStore.isSettingsOpen = true
+	router.push({ name: 'Settings', params: { tab: category } })
 	return true
 }
 

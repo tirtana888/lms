@@ -27,8 +27,9 @@ vi.mock('frappe-ui', () => ({
 	),
 }))
 
+const routerPush = vi.fn()
 vi.mock('vue-router', () => ({
-	useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+	useRouter: () => ({ push: routerPush, replace: vi.fn() }),
 }))
 
 vi.mock('@/components/CommandPalette/CommandPaletteGroup.vue', () => ({
@@ -39,8 +40,6 @@ const user = { data: {} as Record<string, unknown> }
 vi.mock('@/stores/user', () => ({ usersStore: () => ({ userResource: user }) }))
 
 const settings = {
-	isSettingsOpen: false,
-	isSettingsMounted: true,
 	// The per-site on/off flags, which gate a row on top of the sidebar.
 	sidebarSettings: { data: null as unknown },
 	loadSidebarSettings: vi.fn(async () => null),
@@ -142,11 +141,10 @@ async function open(wrapper: ReturnType<typeof build>, title: string) {
 beforeEach(() => {
 	sidebarLinks.value = ADMIN
 	user.data = { is_moderator: true }
-	settings.isSettingsOpen = false
-	settings.isSettingsMounted = true
 	settings.sidebarSettings.data = null
 	resource.next = []
 	resource.params = null
+	routerPush.mockClear()
 })
 
 describe('command palette categories', () => {
@@ -246,13 +244,6 @@ describe('command palette categories', () => {
 		expect(titles(build()).includes('Settings')).toBe(visible)
 	})
 
-	// Settings is a dialog mounted by the desktop sidebar; on a phone nothing is
-	// listening to the flag, so the row would do nothing at all.
-	it('hides Settings when the settings dialog is not mounted', () => {
-		settings.isSettingsMounted = false
-		expect(titles(build())).not.toContain('Settings')
-	})
-
 	// A scope that survived the close reopened the palette silently filtered.
 	it('forgets the category once the palette closes', async () => {
 		const wrapper = build()
@@ -267,10 +258,10 @@ describe('command palette categories', () => {
 		expect(titles(wrapper)).toContain('Batches')
 	})
 
-	it('opens the settings dialog rather than routing', async () => {
+	it('routes to the Settings page', async () => {
 		const wrapper = build()
 		await open(wrapper, 'Settings')
-		expect(settings.isSettingsOpen).toBe(true)
+		expect(routerPush).toHaveBeenCalledWith({ name: 'Settings' })
 	})
 })
 
@@ -339,12 +330,12 @@ describe('command palette settings row', () => {
 		expect(titles(wrapper)).toContain('Settings')
 	})
 
-	it('still opens the dialog when reached by typing', async () => {
+	it('still routes to Settings when reached by typing', async () => {
 		const wrapper = build()
 		await type(wrapper, 'sett')
 		await open(wrapper, 'Settings')
 
-		expect(settings.isSettingsOpen).toBe(true)
+		expect(routerPush).toHaveBeenCalledWith({ name: 'Settings' })
 	})
 
 	it('does not offer Settings to a searching student', async () => {

@@ -81,9 +81,8 @@
 <script setup lang="ts">
 import { Combobox, Button, FormControl, createResource } from 'frappe-ui'
 import type { ComboboxOptionValue } from 'frappe-ui'
-import { useDebounceFn, watchDebounced } from '@vueuse/core'
+import { useDebounceFn } from '@vueuse/core'
 import { useAttrs, computed, ref, watch } from 'vue'
-import { useSettings } from '@/stores/settings'
 import type { Resource } from '@/types'
 
 type ComboboxSize = 'sm' | 'md' | 'lg' | 'xl'
@@ -218,18 +217,6 @@ function onOpen(open: unknown): void {
 }
 
 const onQuery = useDebounceFn((txt: unknown) => reload(txt as string), 300)
-
-// Settings drawer (UserDropdown) is where users add Categories, Course
-// Evaluators, etc. Refresh options once it closes so newly-created
-// linked records show up without a full reload.
-const settingsStore = useSettings()
-watchDebounced(
-	() => settingsStore.isSettingsOpen,
-	(isOpen, wasOpen) => {
-		if (wasOpen && !isOpen && loaded) reload('')
-	},
-	{ debounce: 200 }
-)
 
 function onSelect(val: unknown): void {
 	const selected = val as ComboboxOptionValue | null
