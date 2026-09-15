@@ -122,6 +122,13 @@ NOTIFICATION_REGISTRY = [
 		"Sent to System Managers when a user reports a job post.",
 		"job_report",
 	),
+	(
+		"drip_unlock",
+		"New Content Unlocked",
+		"Course & Batch",
+		"Sent to a student the day a drip-scheduled chapter, quiz, or assignment becomes available to them.",
+		"drip_unlock",
+	),
 ]
 
 def get_notification_settings(event_key: str) -> frappe._dict:
