@@ -9,8 +9,47 @@ from urllib.parse import unquote
 
 import frappe
 from frappe.website.page_renderers.base_renderer import BaseRenderer
-from werkzeug.wrappers import Response
-from werkzeug.wsgi import wrap_file
+from werkzeug.utils import send_file
+
+# A SCORM package is not one request, it is 25-70 of them for a single page view
+# (every JS chunk, font, image and content fragment is its own file) and more
+# again as the learner scrolls. Every one of those was served with no validators
+# at all, so nothing was ever reusable: reopening or reloading a lesson re-fetched
+# the whole package - a 1.4 MB JS chunk included - through the same Python gate,
+# behind a web pool shared with the rest of the app. The bytes are extracted files
+# that only change when an instructor re-uploads the package, so they cache well.
+# An hour, not longer: a re-upload should still reach learners the same session.
+SCORM_ASSET_MAX_AGE = 60 * 60
+
+# How long an "allowed" decision is reused across the follow-up asset requests of
+# the same package. The gate below runs per file, and each run costs several
+# queries (chapter/lesson lookup, course access, drip + deadline lock state) -
+# paid again for every file in the package. Only an allow is cached, and only
+# briefly: a denial is always evaluated fresh, and a lesson that locks mid-session
+# closes within this window rather than whenever the learner next loads a page.
+SCORM_PERMISSION_TTL = 60
+
+
+def _serve_scorm_file(path):
+	"""Serve an extracted SCORM file with the validators a static file server would send.
+
+	`send_file` rather than a bare Response, for its conditional handling: a repeat
+	view answers If-None-Match/If-Modified-Since with a 304 instead of the bytes,
+	and a media file inside a package can be range-requested, which iOS Safari
+	requires before it will play audio or video at all.
+	"""
+	response = send_file(
+		path,
+		frappe.local.request.environ,
+		mimetype=mimetypes.guess_type(path)[0] or "application/octet-stream",
+		conditional=True,
+		max_age=SCORM_ASSET_MAX_AGE,
+	)
+	# send_file marks a cacheable response public; these bytes are gated per user,
+	# so only the learner's own browser may hold them - never a shared proxy or CDN.
+	response.cache_control.public = False
+	response.cache_control.private = True
+	return response
 
 
 class SCORMRenderer(BaseRenderer):
@@ -36,6 +75,11 @@ class SCORMRenderer(BaseRenderer):
 			raise frappe.PermissionError
 		course, title = unquote(parts[1]), unquote(parts[2])
 
+		# Keyed on the session user: an allow is that learner's alone, never shared.
+		cache_key = f"lms-scorm-access:{frappe.session.user}:{course}:{title}"
+		if frappe.cache().get_value(cache_key):
+			return
+
 		chapter = frappe.db.get_value(
 			"Course Chapter",
 			{"course": course, "title": title, "is_scorm_package": 1},
@@ -58,6 +102,8 @@ class SCORMRenderer(BaseRenderer):
 			)
 			raise frappe.PermissionError
 
+		frappe.cache().set_value(cache_key, 1, expires_in_sec=SCORM_PERMISSION_TTL)
+
 	def _is_safe_path(self, path):
 		resolved = os.path.realpath(path)
 		for base in self._DISK_ROOTS:
@@ -67,10 +113,7 @@ class SCORMRenderer(BaseRenderer):
 		return False
 
 	def _serve_file(self, path):
-		f = open(path, "rb")
-		response = Response(wrap_file(frappe.local.request.environ, f), direct_passthrough=True)
-		response.mimetype = mimetypes.guess_type(path)[0]
-		return response
+		return _serve_scorm_file(path)
 
 	def render(self):
 		self._check_permission()
@@ -147,6 +190,11 @@ class LessonSCORMRenderer(BaseRenderer):
 			raise frappe.PermissionError
 		course, lesson = unquote(parts[1]), unquote(parts[2])
 
+		# Keyed on the session user: an allow is that learner's alone, never shared.
+		cache_key = f"lms-scorm-lesson-access:{frappe.session.user}:{course}:{lesson}"
+		if frappe.cache().get_value(cache_key):
+			return
+
 		if not frappe.db.exists("Course Lesson", {"name": lesson, "course": course}):
 			raise frappe.PermissionError
 
@@ -161,16 +209,15 @@ class LessonSCORMRenderer(BaseRenderer):
 			)
 			raise frappe.PermissionError
 
+		frappe.cache().set_value(cache_key, 1, expires_in_sec=SCORM_PERMISSION_TTL)
+
 	def _is_safe_path(self, path):
 		resolved = os.path.realpath(path)
 		scorm_root = os.path.realpath(os.path.join(frappe.local.site_path, "private", "scorm-lesson"))
 		return resolved == scorm_root or resolved.startswith(scorm_root + os.sep)
 
 	def _serve_file(self, path):
-		f = open(path, "rb")
-		response = Response(wrap_file(frappe.local.request.environ, f), direct_passthrough=True)
-		response.mimetype = mimetypes.guess_type(path)[0]
-		return response
+		return _serve_scorm_file(path)
 
 	def render(self):
 		self._check_permission()
