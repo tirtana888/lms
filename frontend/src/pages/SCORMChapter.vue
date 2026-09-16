@@ -176,6 +176,16 @@ const enrollment = createListResource({
 })
 
 const getDataFromLMS = (key) => {
+	// Same reason as ScormBlock.vue: a package that reports over xAPI builds
+	// the statement's actor from these two, and an empty account id makes the
+	// LRS reject the batch with 400 - which the player then shows as its own
+	// full-screen "connection lost". SCORM 1.2 asks cmi.core.*, 2004 cmi.*.
+	if (key === 'cmi.core.student_id' || key === 'cmi.learner_id') {
+		return user.data?.name || ''
+	}
+	if (key === 'cmi.core.student_name' || key === 'cmi.learner_name') {
+		return user.data?.full_name || ''
+	}
 	if (key === 'cmi.core.lesson_status') {
 		return progress.data?.status === 'Complete' ? 'passed' : 'incomplete'
 	} else if (key === 'cmi.launch_data') {

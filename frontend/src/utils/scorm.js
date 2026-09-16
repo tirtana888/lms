@@ -101,6 +101,10 @@ export class Scorm {
 			lesson: this.data.lesson,
 			launchFile: this.data.launch_file,
 			member: userResource.data?.name,
+			// Read back out through the SCORM API as cmi.core.student_name, so
+			// it has to come in from here: this app is mounted standalone by
+			// EditorJS and never gets the pinia instance the store needs.
+			memberName: userResource.data?.full_name,
 		})
 		registerDirectives(this.app)
 		this.app.use(translationPlugin)

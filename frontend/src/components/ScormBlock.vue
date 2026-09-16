@@ -50,6 +50,10 @@ const props = defineProps({
 		type: String,
 		default: null,
 	},
+	memberName: {
+		type: String,
+		default: null,
+	},
 })
 
 const frameSrc = computed(() => safeUrl(props.launchFile))
@@ -100,6 +104,20 @@ const loadProgress = () => {
 }
 
 const getDataFromLMS = (key) => {
+	// A package that reports over xAPI builds the statement's actor from these
+	// two (its own code: getAccountId -> cmi.core.student_id, getUsername ->
+	// cmi.core.student_name). Answering '' produced statements with an empty
+	// account, the LRS rejected the batch with 400, and the player rendered
+	// that rejection as its own full-screen "connection lost" - which reads to
+	// a student as a dead internet connection rather than a refused record,
+	// while the lesson itself and our own progress saving were working fine.
+	// Both spellings: SCORM 1.2 asks for cmi.core.*, 2004 for cmi.*.
+	if (key === 'cmi.core.student_id' || key === 'cmi.learner_id') {
+		return props.member || ''
+	}
+	if (key === 'cmi.core.student_name' || key === 'cmi.learner_name') {
+		return props.memberName || ''
+	}
 	if (key === 'cmi.core.lesson_status') {
 		return progressData.value.status === 'Complete' ? 'passed' : 'incomplete'
 	} else if (key === 'cmi.launch_data' || key === 'cmi.suspend_data') {
