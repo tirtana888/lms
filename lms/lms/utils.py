@@ -657,6 +657,46 @@ def get_chart_data(
 	return data
 
 
+@frappe.whitelist(allow_guest=True)
+@rate_limit(limit=500, seconds=60 * 60)
+def get_active_learners_chart(from_date: str = None, to_date: str = None):
+	"""Daily count of distinct users who logged in, for the Dashboard's
+	"Active learners" chart.
+
+	Not built on Dashboard Chart / get_chart_data like the sibling charts on
+	this page: that mechanism's chart_type is Count, Sum, Average, Group By,
+	Custom or Report - none of them a distinct count, so a chart built the
+	normal way over Activity Log would count login *events*, not learners,
+	overcounting anyone who logs in more than once a day. Confirmed this is
+	not hypothetical - on this site, one day had 39 login events from only
+	29 distinct users, a third higher than the real number.
+	"""
+	from_date, to_date = get_chart_date_range(from_date, to_date)
+	rows = frappe.db.sql(
+		"""
+		SELECT DATE(creation) AS day, COUNT(DISTINCT user) AS count
+		FROM `tabActivity Log`
+		WHERE operation = 'Login' AND status = 'Success'
+			AND creation BETWEEN %(from_date)s AND %(to_date)s
+		GROUP BY day
+		""",
+		{"from_date": from_date, "to_date": to_date},
+		as_dict=True,
+	)
+	counts_by_day = {row.day: row.count for row in rows}
+
+	# Every day in the range gets a row, zero-filled, so a quiet day dips to
+	# zero on the chart instead of leaving a gap - matching how get_result
+	# (the sibling charts' path) fills days with no matching data.
+	result = []
+	day = getdate(from_date)
+	last_day = getdate(to_date)
+	while day <= last_day:
+		result.append({"date": day.strftime("%Y-%m-%d"), "count": counts_by_day.get(day, 0)})
+		day = add_days(day, 1)
+	return result
+
+
 def get_chart_date_range(from_date: str, to_date: str):
 	if not from_date:
 		from_date = add_months(getdate(), -1)
@@ -665,6 +705,13 @@ def get_chart_date_range(from_date: str, to_date: str):
 
 	from_date = get_datetime(from_date).strftime("%Y-%m-%d")
 	to_date = get_datetime(to_date)
+	# A bare date with no time component converts to midnight, and
+	# get_chart_filters compares with <=, so the most recent day in any range
+	# (today's default included) silently excluded every record created after
+	# 00:00:00 that day - i.e. the entire day. Push it to the last instant of
+	# that day instead, same as a human reading "to 14 Sep" would expect.
+	if to_date.time() == datetime.min.time():
+		to_date = to_date.replace(hour=23, minute=59, second=59)
 
 	return from_date, to_date
 

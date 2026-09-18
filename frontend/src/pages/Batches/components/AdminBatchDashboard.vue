@@ -121,32 +121,49 @@
 			</div>
 
 			<div class="order-1 lg:order-2 space-y-5">
-				<AxisChart
-					v-if="showProgressChart"
-					class="border rounded-lg p-3 min-h-[300px]"
-					:config="{
-						data: filteredChartData,
-						title: __('Batch Summary'),
-						subtitle: __('Progress of students in courses and assessments'),
-						xAxis: {
-							key: 'task',
-							title: 'Tasks',
-							type: 'category',
-						},
-						yAxis: {
-							title: __('Number of Students'),
-							echartOptions: {
-								minInterval: 1,
+				<template v-if="showProgressChart">
+					<AxisChart
+						v-if="filteredChartData.length"
+						class="border rounded-lg p-3 min-h-[300px]"
+						:config="{
+							data: filteredChartData,
+							title: __('Batch Summary'),
+							subtitle: __('Progress of students in courses and assessments'),
+							xAxis: {
+								key: 'task',
+								title: 'Tasks',
+								type: 'category',
 							},
-						},
-						series: [
-							{
-								name: 'value',
-								type: 'bar',
+							yAxis: {
+								title: __('Number of Students'),
+								echartOptions: {
+									minInterval: 1,
+								},
 							},
-						],
-					}"
-				/>
+							series: [
+								{
+									name: 'value',
+									type: 'bar',
+								},
+							],
+						}"
+					/>
+					<!-- filteredChartData drops every zero-value entry, which is right
+					     once real bars exist (no point plotting a flat zero next to
+					     them) but leaves an unlabelled empty box when EVERY course and
+					     assessment is still at zero completions - indistinguishable at
+					     a glance from broken/missing data. Say so plainly instead. -->
+					<EmptyStateLayout
+						v-else
+						class="border rounded-lg p-3"
+						name="Completions"
+						icon="lucide-bar-chart-3"
+						:title="__('No completions yet')"
+						:description="
+							__('No students have completed a course or assessment yet.')
+						"
+					/>
+				</template>
 
 				<div class="p-4 border rounded-lg">
 					<BatchFeedback v-if="batch.data" :batch="batch.data.name" />

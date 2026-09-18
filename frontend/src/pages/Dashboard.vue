@@ -20,9 +20,13 @@
 				<div class="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-5 p-4">
 					<div>
 						<div class="flex items-center justify-between mb-3">
-							<div class="font-medium text-ink-gray-9">
-								{{ __('New Signups') }}
-							</div>
+							<TabButtons
+								:options="[
+									{ label: __('New signups'), value: 'signups' },
+									{ label: __('Active learners'), value: 'active_learners' },
+								]"
+								v-model="chartTab"
+							/>
 							<FormControl
 								type="select"
 								v-model="range"
@@ -32,7 +36,7 @@
 						</div>
 						<div class="min-h-64 border rounded-md">
 							<AxisChart
-								v-if="signupsChart.data"
+								v-if="chartTab === 'signups' && signupsChart.data"
 								:config="{
 									data: signupsChart.data,
 									title: '',
@@ -48,6 +52,26 @@
 									},
 									series: [
 										{ name: 'signups', type: 'line', showDataPoints: true },
+									],
+								}"
+							/>
+							<AxisChart
+								v-else-if="chartTab === 'active_learners' && activeLearnersChart.data"
+								:config="{
+									data: activeLearnersChart.data,
+									title: '',
+									subtitle: '',
+									xAxis: {
+										key: 'date',
+										type: 'time',
+										title: __('Date'),
+										timeGrain: 'day',
+									},
+									yAxis: {
+										title: __('Active learners'),
+									},
+									series: [
+										{ name: 'active_learners', type: 'line', showDataPoints: true },
 									],
 								}"
 							/>
@@ -243,6 +267,11 @@ const user = inject('$user')
 
 const activeTab = ref('dashboard')
 
+// Which chart the "Your school" card's tab switcher is showing. Both charts
+// still load eagerly below (the active-learners query is a single cheap
+// GROUP BY) so switching tabs never needs to wait on a fetch.
+const chartTab = ref('signups')
+
 const range = ref('7')
 const rangeOptions = [
 	{ label: __('Last 7 days'), value: '7' },
@@ -277,6 +306,27 @@ const signupsChart = createResource({
 	},
 })
 
+// Distinct daily logins from Activity Log, not a Dashboard Chart like
+// signupsChart: Dashboard Chart's own aggregations (Count/Sum/Average/...)
+// have no "distinct" option, so built that way this would count login
+// *events* rather than learners - a student logging in twice in a day would
+// be counted twice. lms.lms.utils.get_active_learners_chart does the
+// distinct-by-day count directly and returns the same {date, count} shape
+// get_chart_data does, so it drops into the same transform/chart config.
+const activeLearnersChart = createResource({
+	url: 'lms.lms.utils.get_active_learners_chart',
+	params: {
+		from_date: dayjs().subtract(7, 'day').format('YYYY-MM-DD'),
+	},
+	auto: true,
+	transform(data) {
+		return data.map((item) => ({
+			date: new Date(item.date),
+			active_learners: item.count,
+		}))
+	},
+})
+
 watch(range, () => {
 	signupsChart.update({
 		params: {
@@ -285,6 +335,12 @@ watch(range, () => {
 		},
 	})
 	signupsChart.reload()
+	activeLearnersChart.update({
+		params: {
+			from_date: dayjs().subtract(Number(range.value), 'day').format('YYYY-MM-DD'),
+		},
+	})
+	activeLearnersChart.reload()
 })
 
 // The "Overview" tab: the same content this page used to show admins
