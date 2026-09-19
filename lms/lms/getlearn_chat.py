@@ -219,8 +219,13 @@ def send_message(session_id: str, message: str, lesson: str | None = None) -> di
 		body["lesson_id"] = lesson
 
 	data = _request("POST", f"/v1/chat/sessions/{quote(session_id, safe='')}/messages", body)
+	# Follow-up questions the coach suggests; defensive about shape and length, they go to the UI.
+	suggestions = [
+		s.strip()[:60] for s in (data.get("suggestions") or []) if isinstance(s, str) and s.strip()
+	][:3]
 	return {
 		"id": data.get("message_id"),
 		"message": data["content"],
 		"sources": _lesson_titles(data.get("source_content_ids") or []),
+		"suggestions": suggestions,
 	}

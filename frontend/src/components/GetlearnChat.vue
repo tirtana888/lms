@@ -9,10 +9,11 @@
 				v-if="open"
 				role="dialog"
 				aria-label="AI Study Coach"
-				class="flex h-[34rem] max-h-[78vh] w-[24rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-outline-gray-2 bg-surface-base shadow-2xl"
+				class="gl-panel flex flex-col overflow-hidden border border-outline-gray-2 bg-surface-base shadow-2xl"
+				:style="panelStyle"
 			>
 				<!-- Header -->
-				<header class="flex items-center gap-3 border-b border-outline-gray-2 px-4 py-3">
+				<header class="gl-header flex items-center gap-3 border-b border-outline-gray-2 px-4 py-3">
 					<div
 						class="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#00A0E0]/15 text-[#00A0E0]"
 					>
@@ -27,7 +28,7 @@
 						</div>
 					</div>
 					<button
-						class="rounded-lg p-2 text-ink-gray-5 transition hover:bg-surface-gray-2 hover:text-ink-gray-8 disabled:opacity-40"
+						class="gl-iconbtn flex items-center justify-center rounded-lg p-2 text-ink-gray-5 transition hover:bg-surface-gray-2 hover:text-ink-gray-8 disabled:opacity-40"
 						title="Mulai percakapan baru"
 						aria-label="Mulai percakapan baru"
 						:disabled="loading || starting"
@@ -36,7 +37,7 @@
 						<span class="lucide-square-pen size-4" />
 					</button>
 					<button
-						class="rounded-lg p-2 text-ink-gray-5 transition hover:bg-surface-gray-2 hover:text-ink-gray-8"
+						class="gl-iconbtn flex items-center justify-center rounded-lg p-2 text-ink-gray-5 transition hover:bg-surface-gray-2 hover:text-ink-gray-8"
 						title="Tutup"
 						aria-label="Tutup"
 						@click="open = false"
@@ -50,7 +51,7 @@
 					ref="scroller"
 					role="log"
 					aria-live="polite"
-					class="flex-1 space-y-3 overflow-y-auto px-4 py-4"
+					class="gl-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4"
 				>
 					<div v-if="starting && !messages.length" class="space-y-3" aria-hidden="true">
 						<div class="h-10 w-3/4 animate-pulse rounded-2xl bg-surface-gray-2" />
@@ -70,7 +71,7 @@
 
 						<div
 							v-else
-							class="flex gl-fade"
+							class="gl-fade flex"
 							:class="item.role === 'user' ? 'justify-end' : 'justify-start'"
 						>
 							<div
@@ -122,12 +123,12 @@
 						</div>
 					</div>
 
-					<!-- Quick questions, only before the first question -->
-					<div v-if="showSuggestions" class="flex flex-wrap gap-2 pt-1">
+					<!-- Starter questions, only before the first question -->
+					<div v-if="showStarters" class="flex flex-wrap gap-2 pt-1">
 						<button
-							v-for="q in suggestions"
+							v-for="q in starters"
 							:key="q"
-							class="rounded-full border border-[#3050A0]/30 bg-[#3050A0]/5 px-3 py-1.5 text-p-xs text-ink-gray-8 transition hover:border-[#00A0E0]/60 hover:bg-[#00A0E0]/10"
+							class="gl-chip rounded-full border border-[#3050A0]/30 bg-[#3050A0]/5 px-3 py-1.5 text-p-xs text-ink-gray-8 transition hover:border-[#00A0E0]/60 hover:bg-[#00A0E0]/10"
 							@click="ask(q)"
 						>
 							{{ q }}
@@ -135,8 +136,24 @@
 					</div>
 				</div>
 
+				<!-- Follow-up suggestions: one scrollable row above the composer -->
+				<div
+					v-if="showFollowUps"
+					class="gl-chips flex gap-2 overflow-x-auto border-t border-outline-gray-2 px-3 py-2"
+					aria-label="Saran pertanyaan"
+				>
+					<button
+						v-for="q in followUps"
+						:key="q"
+						class="gl-chip shrink-0 whitespace-nowrap rounded-full border border-[#3050A0]/30 bg-[#3050A0]/5 px-3 py-1.5 text-p-xs text-ink-gray-8 transition hover:border-[#00A0E0]/60 hover:bg-[#00A0E0]/10"
+						@click="ask(q)"
+					>
+						{{ q }}
+					</button>
+				</div>
+
 				<!-- Composer -->
-				<form class="border-t border-outline-gray-2 p-3" @submit.prevent="send">
+				<form class="gl-composer border-t border-outline-gray-2 px-3 pt-3" @submit.prevent="send">
 					<div class="flex items-end gap-2">
 						<textarea
 							id="getlearn-chat-input"
@@ -144,7 +161,7 @@
 							v-model="draft"
 							rows="1"
 							maxlength="1000"
-							class="max-h-28 min-h-10 flex-1 resize-none rounded-xl border border-outline-gray-2 bg-surface-gray-1 px-3 py-2.5 text-p-sm text-ink-gray-9 outline-none transition placeholder:text-ink-gray-4 focus:border-[#00A0E0] focus:ring-2 focus:ring-[#00A0E0]/25 disabled:opacity-60"
+							class="gl-input max-h-28 min-h-10 flex-1 resize-none rounded-xl border border-outline-gray-2 bg-surface-gray-1 px-3 py-2.5 text-p-sm text-ink-gray-9 outline-none transition placeholder:text-ink-gray-4 focus:border-[#00A0E0] focus:ring-2 focus:ring-[#00A0E0]/25 disabled:opacity-60"
 							placeholder="Tanya soal materi, tugas, atau nilaimu..."
 							aria-label="Pertanyaan untuk AI Study Coach"
 							:disabled="loading || !sessionId"
@@ -153,7 +170,7 @@
 						/>
 						<button
 							type="submit"
-							class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#3050A0] text-white transition hover:bg-[#274285] disabled:cursor-not-allowed disabled:opacity-40"
+							class="gl-send flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#3050A0] text-white transition hover:bg-[#274285] disabled:cursor-not-allowed disabled:opacity-40"
 							title="Kirim"
 							aria-label="Kirim"
 							:disabled="loading || !sessionId || !draft.trim()"
@@ -162,7 +179,7 @@
 						</button>
 					</div>
 					<div class="mt-1.5 flex items-center justify-between px-1 text-p-xs text-ink-gray-4">
-						<span>Enter untuk kirim, Shift+Enter baris baru</span>
+						<span class="gl-hint">Enter untuk kirim, Shift+Enter baris baru</span>
 						<span v-if="draft.length > 800" :class="draft.length >= 1000 ? 'text-ink-red-4' : ''">
 							{{ draft.length }}/1000
 						</span>
@@ -171,7 +188,9 @@
 			</section>
 		</Transition>
 
+		<!-- The launcher hides while the panel covers the screen on a phone -->
 		<button
+			v-show="!(open && isMobile)"
 			class="flex h-12 items-center gap-2 rounded-full bg-[#3050A0] px-4 text-p-sm font-medium text-white shadow-lg transition hover:bg-[#274285]"
 			:aria-expanded="open"
 			aria-label="Buka AI Study Coach"
@@ -190,7 +209,7 @@
 
 <script setup>
 import { call } from 'frappe-ui'
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import MarkdownIt from 'markdown-it'
 import DOMPurify from 'dompurify'
 import { useSidebar } from '@/stores/sidebar'
@@ -216,8 +235,36 @@ const loading = ref(false)
 const sessionId = ref(null)
 const draft = ref('')
 const messages = ref([])
+const suggestions = ref([]) // follow-ups for the latest answer, from getlearn.ai
 const scroller = ref(null)
 const input = ref(null)
+
+// ---- Phone layout -------------------------------------------------------------------------
+// Below 640px the panel is a full-screen sheet. When the on-screen keyboard opens the *visual*
+// viewport shrinks (and on iOS also scrolls), so the sheet follows visualViewport instead of the
+// layout viewport - otherwise the composer ends up hidden behind the keyboard.
+const isMobile = ref(false)
+const viewport = ref({ height: 0, top: 0 })
+let mql = null
+const onMql = (e) => (isMobile.value = e.matches)
+const syncViewport = () => {
+	const vv = window.visualViewport
+	if (!vv) return
+	viewport.value = { height: Math.round(vv.height), top: Math.round(vv.offsetTop) }
+	if (open.value && isMobile.value) scrollDown()
+}
+const panelStyle = computed(() =>
+	isMobile.value && viewport.value.height
+		? { '--gl-vh': `${viewport.value.height}px`, '--gl-top': `${viewport.value.top}px` }
+		: {},
+)
+// Keep the page behind a full-screen sheet from scrolling.
+watch([open, isMobile], ([isOpen, mobile]) => {
+	document.body.style.overflow = isOpen && mobile ? 'hidden' : ''
+})
+const onKey = (e) => {
+	if (e.key === 'Escape' && open.value) open.value = false
+}
 
 // One conversation follows the student from lesson to lesson: it is kept by getlearn.ai and
 // reloaded from there, so switching lessons, reloading or using another device never loses it.
@@ -239,19 +286,22 @@ const items = computed(() => {
 	return out
 })
 
-const suggestions = computed(() => [
+// Suggestions. Before the first question: starter chips in the conversation. After that: a row
+// above the composer, using the follow-ups getlearn.ai sent with the latest answer (or the
+// starters again when a conversation was just reloaded and there are none).
+const starters = computed(() => [
 	'Jelaskan inti lesson ini',
 	'Kasih contoh dong',
+	'Uji pemahamanku',
 	'Bagaimana progres belajarku?',
 	'Tugas apa yang belum kukumpulkan?',
 	'Berapa nilai quiz-ku?',
 ])
-const showSuggestions = computed(
-	() =>
-		!!sessionId.value &&
-		!loading.value &&
-		!messages.value.some((m) => m.role === 'user'),
-)
+const hasAsked = computed(() => messages.value.some((m) => m.role === 'user'))
+const canSuggest = computed(() => !!sessionId.value && !loading.value && !starting.value)
+const showStarters = computed(() => canSuggest.value && !hasAsked.value)
+const followUps = computed(() => (suggestions.value.length ? suggestions.value : starters.value.slice(0, 4)))
+const showFollowUps = computed(() => canSuggest.value && hasAsked.value)
 
 const errorText = (err) => {
 	// Frappe puts the readable reason (our frappe.throw messages) in _server_messages.
@@ -288,6 +338,7 @@ const fromHistory = (m) => ({
 
 const startSession = async (fresh = false) => {
 	starting.value = true
+	suggestions.value = []
 	try {
 		const data = await call('lms.lms.getlearn_chat.resume_session', { fresh: fresh ? 1 : 0 })
 		sessionId.value = data.session_id
@@ -306,14 +357,15 @@ const toggle = async () => {
 	if (open.value) {
 		if (!sessionId.value) await startSession()
 		else scrollDown()
-		nextTick(() => input.value?.focus())
+		// Focusing at once would pop the keyboard over a fresh phone sheet; let people read first.
+		if (!isMobile.value) nextTick(() => input.value?.focus())
 	}
 }
 
 const newConversation = async () => {
 	if (loading.value || starting.value) return
 	await startSession(true)
-	nextTick(() => input.value?.focus())
+	if (!isMobile.value) nextTick(() => input.value?.focus())
 }
 
 const ask = async (text, { echo = true } = {}) => {
@@ -327,6 +379,7 @@ const ask = async (text, { echo = true } = {}) => {
 			lessonTitle: currentLessonTitle.value,
 		})
 	}
+	suggestions.value = []
 	loading.value = true
 	scrollDown()
 	try {
@@ -343,6 +396,7 @@ const ask = async (text, { echo = true } = {}) => {
 			lesson: props.lesson,
 			lessonTitle: currentLessonTitle.value,
 		})
+		suggestions.value = Array.isArray(data.suggestions) ? data.suggestions : []
 	} catch (err) {
 		messages.value.push({
 			role: 'assistant',
@@ -362,12 +416,12 @@ const send = async () => {
 	draft.value = ''
 	nextTick(autosize)
 	await ask(text)
-	nextTick(() => input.value?.focus())
+	if (!isMobile.value) nextTick(() => input.value?.focus())
 }
 
 const onEnter = (e) => {
-	// Do not send while an input method (e.g. IME) is still composing text.
-	if (e.isComposing) return
+	// On a phone Enter is a line break (there is a send button); never send mid-IME-composition.
+	if (isMobile.value || e.isComposing) return
 	e.preventDefault()
 	send()
 }
@@ -386,6 +440,13 @@ watch(open, (isOpen) => {
 })
 
 onMounted(async () => {
+	mql = window.matchMedia('(max-width: 639px)')
+	isMobile.value = mql.matches
+	mql.addEventListener?.('change', onMql)
+	window.visualViewport?.addEventListener('resize', syncViewport)
+	window.visualViewport?.addEventListener('scroll', syncViewport)
+	window.addEventListener('keydown', onKey)
+	syncViewport()
 	try {
 		const cfg = await call('lms.lms.getlearn_chat.get_chat_config')
 		enabled.value = !!cfg?.enabled
@@ -393,9 +454,80 @@ onMounted(async () => {
 		enabled.value = false
 	}
 })
+
+onBeforeUnmount(() => {
+	mql?.removeEventListener?.('change', onMql)
+	window.visualViewport?.removeEventListener('resize', syncViewport)
+	window.visualViewport?.removeEventListener('scroll', syncViewport)
+	window.removeEventListener('keydown', onKey)
+	document.body.style.overflow = ''
+})
 </script>
 
 <style scoped>
+/* Desktop: a floating card. Phone: a full-screen sheet that tracks the visual viewport. */
+.gl-panel {
+	width: 24rem;
+	max-width: calc(100vw - 2rem);
+	height: 34rem;
+	max-height: 78vh;
+	border-radius: 1rem;
+}
+.gl-chips {
+	scrollbar-width: none;
+}
+.gl-chips::-webkit-scrollbar {
+	display: none;
+}
+.gl-composer {
+	padding-bottom: 0.75rem;
+}
+
+@media (max-width: 639px) {
+	.gl-panel {
+		position: fixed;
+		inset-inline: 0;
+		top: var(--gl-top, 0px);
+		z-index: 50;
+		width: 100%;
+		max-width: none;
+		height: var(--gl-vh, 100dvh);
+		max-height: none;
+		border: 0;
+		border-radius: 0;
+	}
+	.gl-header {
+		padding-top: max(0.75rem, env(safe-area-inset-top));
+	}
+	.gl-composer {
+		padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+	}
+	/* 44px touch targets */
+	.gl-iconbtn {
+		min-width: 44px;
+		min-height: 44px;
+	}
+	.gl-send {
+		width: 44px;
+		height: 44px;
+	}
+	.gl-chip {
+		padding-block: 0.6rem;
+		font-size: 0.8125rem;
+	}
+	/* 16px stops iOS from zooming the page when the input is focused */
+	.gl-input {
+		font-size: 16px;
+		min-height: 44px;
+	}
+	.gl-hint {
+		display: none;
+	}
+	.gl-scroll {
+		overscroll-behavior: contain;
+	}
+}
+
 .gl-prose :deep(p) {
 	margin: 0 0 0.5rem;
 }
@@ -435,6 +567,15 @@ onMounted(async () => {
 	padding-inline-start: 0.75rem;
 	border-inline-start: 3px solid rgba(0, 160, 224, 0.6);
 	opacity: 0.9;
+}
+/* long words and tables never widen the bubble past the screen */
+.gl-prose {
+	overflow-wrap: anywhere;
+}
+.gl-prose :deep(table) {
+	display: block;
+	max-width: 100%;
+	overflow-x: auto;
 }
 
 /* typing dots */
@@ -484,6 +625,13 @@ onMounted(async () => {
 .gl-pop-leave-to {
 	opacity: 0;
 	transform: translateY(8px) scale(0.98);
+}
+@media (max-width: 639px) {
+	/* a sheet rises from the bottom instead of scaling */
+	.gl-pop-enter-from,
+	.gl-pop-leave-to {
+		transform: translateY(24px);
+	}
 }
 
 @media (prefers-reduced-motion: reduce) {
