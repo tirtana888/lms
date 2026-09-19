@@ -313,6 +313,12 @@ def save_progress(lesson: str, course: str, scorm_details: dict = None):
 	"""
 	Note: Pass the argument scorm_details as a dict if it is SCORM related save_progress
 	"""
+	# A SCORM block remembers the lesson name it was uploaded under, which is stale once
+	# the lesson has been given its real title; record progress on the lesson as it exists.
+	from lms.lms.permissions import resolve_lesson_name
+
+	lesson = resolve_lesson_name(course, lesson) or lesson
+
 	# The completion path writes the enrollment twice: LMS Course Progress.on_update
 	# recalculates progress, then this advances current_lesson. Batch them so the
 	# request emits a single on_update, as the pre-regression .save() did.

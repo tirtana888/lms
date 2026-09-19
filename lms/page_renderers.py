@@ -182,7 +182,7 @@ class LessonSCORMRenderer(BaseRenderer):
 		return "scorm-lesson/" in self.path
 
 	def _check_permission(self):
-		from lms.lms.permissions import can_access_lesson, get_locked_lessons
+		from lms.lms.permissions import can_access_lesson, get_locked_lessons, resolve_lesson_name
 
 		parts = self.path.strip("/").split("/")
 		# scorm-lesson/<course>/<lesson>/...
@@ -195,7 +195,11 @@ class LessonSCORMRenderer(BaseRenderer):
 		if frappe.cache().get_value(cache_key):
 			return
 
-		if not frappe.db.exists("Course Lesson", {"name": lesson, "course": course}):
+		# The URL carries the lesson name the package was uploaded under, which may since
+		# have been renamed ("<n> Untitled lesson" -> its real title); permissions are
+		# checked against the lesson as it exists now.
+		lesson = resolve_lesson_name(course, lesson)
+		if not lesson:
 			raise frappe.PermissionError
 
 		# Same rule as the chapter path: can_access_lesson alone is lock-unaware,

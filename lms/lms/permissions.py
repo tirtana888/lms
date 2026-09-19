@@ -9,6 +9,8 @@ all rely on, mirroring the dedicated permissions module pattern used by frappe
 core (frappe/permissions.py), CRM (crm.permissions.*), and Raven (raven.permissions).
 """
 
+import json
+
 import frappe
 
 from lms.lms.utils import (
@@ -63,6 +65,47 @@ def resolve_lesson_access(lesson: str, *, user: str | None = None) -> tuple[bool
 		return False, False
 	finally:
 		frappe.session.user = original_user
+
+
+def resolve_lesson_name(course: str, lesson: str) -> str | None:
+	"""Map the lesson name a SCORM block *remembers* to the lesson that exists today.
+
+	An author typically creates a lesson (it is born "<n> Untitled lesson"), uploads the
+	SCORM package into it, and only then gives it a title. Course Lesson names embed the
+	title, so the rename changes the document name - but the Scorm block keeps the old
+	name in its own saved data, and the package sits on disk under that old name. Every
+	URL and every progress write the player makes still carries the old name, which no
+	longer exists, so access is denied and progress is never recorded.
+
+	Returns ``lesson`` itself when it still exists, otherwise the current name of the
+	lesson in this course whose Scorm block was created under that name, else ``None``.
+	Only an exact match on a block's own ``course`` + ``lesson`` is accepted, so this can
+	not be used to reach some other lesson.
+	"""
+	if not course or not lesson:
+		return None
+	if frappe.db.exists("Course Lesson", {"name": lesson, "course": course}):
+		return lesson
+
+	candidates = frappe.get_all(
+		"Course Lesson",
+		filters={"course": course, "content": ["like", f"%{lesson}%"]},
+		fields=["name", "content"],
+	)
+	for row in candidates:
+		try:
+			blocks = json.loads(row.content or "{}").get("blocks", [])
+		except (ValueError, AttributeError):
+			continue
+		for block in blocks:
+			data = block.get("data") or {}
+			if (
+				block.get("type") == "scorm"
+				and data.get("lesson") == lesson
+				and data.get("course") == course
+			):
+				return row.name
+	return None
 
 
 def can_access_lesson(lesson: str, *, instructor_only: bool = False, user: str | None = None) -> bool:
