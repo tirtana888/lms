@@ -2,7 +2,7 @@
 	<div v-if="enabled" class="fixed bottom-20 end-4 z-40 sm:bottom-5 sm:end-5 flex flex-col items-end gap-3">
 		<div
 			v-if="open"
-			class="flex h-[32rem] max-h-[80vh] w-[22rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border bg-surface-white shadow-2xl"
+			class="flex h-[32rem] max-h-[80vh] w-[22rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border bg-surface-base shadow-2xl"
 		>
 			<div class="flex items-center justify-between border-b px-4 py-3">
 				<div class="flex items-center gap-2">
@@ -64,7 +64,7 @@
 					v-model="draft"
 					rows="1"
 					maxlength="1000"
-					class="max-h-28 min-h-9 flex-1 resize-none rounded-md border bg-surface-white px-3 py-2 text-p-sm text-ink-gray-9 outline-none focus:border-outline-gray-4"
+					class="max-h-28 min-h-9 flex-1 resize-none rounded-md border bg-surface-gray-1 px-3 py-2 text-p-sm text-ink-gray-9 outline-none focus:border-outline-gray-4"
 					:placeholder="__('Ask about this lesson...')"
 					:disabled="loading || !sessionId"
 					@keydown.enter.exact.prevent="send"

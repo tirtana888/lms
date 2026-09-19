@@ -13,6 +13,15 @@ class LMSSettings(Document):
 		self.validate_signup()
 		self.validate_contact_us_details()
 		self.validate_lesson_dwell_time()
+		self.validate_getlearn_settings()
+
+	def validate_getlearn_settings(self):
+		# A typo here (e.g. "ttps://...") does not fail on save; it fails later, for students,
+		# inside the chat widget. An empty URL is fine: the code falls back to the default.
+		url = (self.getlearn_base_url or "").strip()
+		self.getlearn_base_url = url
+		if self.getlearn_enabled and url and not url.startswith(("http://", "https://")):
+			frappe.throw(_("getlearn.ai Base URL must start with https:// (for example https://example.com)."))
 
 	def validate_lesson_dwell_time(self):
 		if cint(self.lesson_dwell_time) < 1:
