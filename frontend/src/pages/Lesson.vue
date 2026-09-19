@@ -388,7 +388,11 @@
 		v-model:notes="notes"
 		@updateNotes="updateNotes"
 	/>
-	<GetlearnChat v-if="lesson.data?.name" :lesson="lesson.data.name" />
+	<GetlearnChat
+		v-if="lesson.data?.name"
+		:lesson="lesson.data.name"
+		:lessonTitle="lesson.data.title"
+	/>
 </template>
 <script setup>
 import {

@@ -126,6 +126,60 @@ def get_chat_config() -> dict:
 	return {"enabled": _config() is not None}
 
 
+def _lesson_titles_map(ids: list[str]) -> dict[str, str]:
+	ids = [i for i in dict.fromkeys(ids) if i]
+	if not ids:
+		return {}
+	rows = frappe.get_all("Course Lesson", filters={"name": ["in", ids]}, fields=["name", "title"])
+	return {r.name: r.title for r in rows}
+
+
+def _history_items(messages: list[dict]) -> list[dict]:
+	"""getlearn's stored messages in the shape the widget renders, with lesson titles resolved."""
+	wanted: list[str] = []
+	for m in messages:
+		wanted.append(m.get("lesson_id") or "")
+		wanted.extend(m.get("source_content_ids") or [])
+	titles = _lesson_titles_map(wanted)
+
+	items = []
+	for m in messages:
+		lesson_id = m.get("lesson_id")
+		items.append(
+			{
+				"id": m.get("id"),
+				"role": "user" if m.get("sender") == "user" else "assistant",
+				"text": m.get("content") or "",
+				"sources": [
+					{"id": i, "title": titles[i]} for i in (m.get("source_content_ids") or []) if i in titles
+				],
+				"lesson": lesson_id if lesson_id in titles else None,
+				"lesson_title": titles.get(lesson_id) if lesson_id else None,
+			}
+		)
+	return items
+
+
+@frappe.whitelist()
+def resume_session(fresh: int | str = 0) -> dict:
+	"""The student's one continuous conversation with the coach, with its recent messages.
+
+	It follows the student from lesson to lesson (the open lesson travels with each message), and
+	survives reloads and other devices because getlearn.ai keeps it. ``fresh`` starts a new one.
+	"""
+	user = _require_student()
+	data = _request(
+		"POST",
+		"/v1/chat/sessions/resume",
+		{"learner_id": _learner_ref(user), "fresh": frappe.utils.cint(fresh) == 1},
+	)
+	return {
+		"session_id": data["session_id"],
+		"resumed": bool(data.get("resumed")),
+		"messages": _history_items(data.get("messages") or []),
+	}
+
+
 @frappe.whitelist()
 def start_session(lesson: str | None = None) -> dict:
 	user = _require_student()
@@ -140,7 +194,7 @@ def start_session(lesson: str | None = None) -> dict:
 
 
 @frappe.whitelist()
-def send_message(session_id: str, message: str) -> dict:
+def send_message(session_id: str, message: str, lesson: str | None = None) -> dict:
 	user = _require_student()
 
 	if not isinstance(session_id, str) or not session_id:
@@ -159,8 +213,14 @@ def send_message(session_id: str, message: str) -> dict:
 
 	_check_rate_limit(user)
 
-	data = _request("POST", f"/v1/chat/sessions/{quote(session_id, safe='')}/messages", {"message": message})
+	body = {"message": message}
+	# The lesson the student has open right now; retrieval and their scores follow it.
+	if lesson and isinstance(lesson, str) and frappe.db.exists("Course Lesson", lesson):
+		body["lesson_id"] = lesson
+
+	data = _request("POST", f"/v1/chat/sessions/{quote(session_id, safe='')}/messages", body)
 	return {
+		"id": data.get("message_id"),
 		"message": data["content"],
 		"sources": _lesson_titles(data.get("source_content_ids") or []),
 	}
