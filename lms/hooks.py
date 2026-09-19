@@ -26,7 +26,8 @@ def get_lms_path():
 # ------------------
 
 # include js, css files in header of desk.html
-# app_include_css = "/assets/lms/css/lms.css"
+# Desk visual theme (presentation only). Bump ?v= after editing the file so browsers refetch it.
+app_include_css = "/assets/lms/css/nusadaya_desk.css?v=1"
 # app_include_js = "/assets/lms/js/lms.js"
 
 # include js, css files in header of web template
