@@ -388,6 +388,7 @@
 		v-model:notes="notes"
 		@updateNotes="updateNotes"
 	/>
+	<GetlearnChat v-if="lesson.data?.name" :lesson="lesson.data.name" />
 </template>
 <script setup>
 import {
@@ -442,6 +443,7 @@ import HeaderButton from '@/components/HeaderButton.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import Notes from '@/components/Notes/Notes.vue'
 import InlineLessonMenu from '@/components/Notes/InlineLessonMenu.vue'
+import GetlearnChat from '@/components/GetlearnChat.vue'
 import { parseStoredEditorJs } from '@/utils/lessonForm'
 import { getLmsRoute } from '@/utils/basePath'
 import { provideStudentView } from '@/composables/useStudentView'

@@ -21,6 +21,11 @@
 		"column_break_aiquiz",
 		"deepseek_api_key",
 		"livecode_url",
+		"getlearn_section",
+		"getlearn_enabled",
+		"getlearn_api_key",
+		"column_break_getlearn",
+		"getlearn_base_url",
 		"notifications_section",
 		"send_notification_for_published_courses",
 		"column_break_dtns",
@@ -305,6 +310,37 @@
 			"fieldname": "deepseek_api_key",
 			"fieldtype": "Password",
 			"label": "DeepSeek API Key"
+		},
+		{
+			"collapsible": 1,
+			"fieldname": "getlearn_section",
+			"fieldtype": "Section Break",
+			"label": "getlearn.ai Integration"
+		},
+		{
+			"default": "0",
+			"description": "Enables the AI Study Coach chat widget. Quiz/completion data itself is pulled by getlearn.ai directly from this site's REST API, not pushed from here.",
+			"fieldname": "getlearn_enabled",
+			"fieldtype": "Check",
+			"label": "Enable getlearn.ai Integration"
+		},
+		{
+			"depends_on": "getlearn_enabled",
+			"description": "API key for this school's tenant on getlearn.ai. Issued when the tenant is created.",
+			"fieldname": "getlearn_api_key",
+			"fieldtype": "Password",
+			"label": "getlearn.ai API Key"
+		},
+		{
+			"fieldname": "column_break_getlearn",
+			"fieldtype": "Column Break"
+		},
+		{
+			"default": "https://getlearn-core-production.up.railway.app",
+			"depends_on": "getlearn_enabled",
+			"fieldname": "getlearn_base_url",
+			"fieldtype": "Data",
+			"label": "getlearn.ai Base URL"
 		},
 		{
 			"fieldname": "sidebar_tab",
