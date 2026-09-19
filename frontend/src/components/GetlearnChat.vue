@@ -1,5 +1,9 @@
 <template>
-	<div v-if="enabled" class="fixed bottom-20 end-4 z-40 sm:bottom-5 sm:end-5 flex flex-col items-end gap-3">
+	<div
+		v-if="enabled"
+		class="fixed bottom-20 start-4 z-40 flex flex-col items-start gap-3 sm:bottom-5"
+		:class="sidebar.isSidebarCollapsed ? 'sm:start-[4.5rem]' : 'sm:start-[15rem]'"
+	>
 		<div
 			v-if="open"
 			class="flex h-[32rem] max-h-[80vh] w-[22rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border bg-surface-base shadow-2xl"
@@ -93,6 +97,7 @@
 <script setup>
 import { Button, call } from 'frappe-ui'
 import { nextTick, onMounted, ref, watch } from 'vue'
+import { useSidebar } from '@/stores/sidebar'
 import MarkdownIt from 'markdown-it'
 import DOMPurify from 'dompurify'
 
@@ -106,6 +111,8 @@ const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 const render = (text) =>
 	DOMPurify.sanitize(md.render(text || ''), { USE_PROFILES: { html: true } })
 
+// Bottom-left, clear of the lesson outline on the right and (on desktop) of the app sidebar.
+const sidebar = useSidebar()
 const enabled = ref(false)
 const open = ref(false)
 const loading = ref(false)
