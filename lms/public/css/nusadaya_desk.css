@@ -2,9 +2,11 @@
  * Nusadaya Enterprise Desk theme
  * ---------------------------------------------------------------------------
  * PRESENTATION ONLY. This file changes colours, spacing, radius, shadows and
- * typography of the Frappe Desk (/app). It contains no JavaScript, does not
- * hide, move or rename any control, and does not touch any data or permission.
- * Remove the `app_include_css` line in hooks.py to get stock Frappe back.
+ * typography of the Frappe Desk (/app), and (section 4-5) greys out or hides
+ * the entries that carry Frappe branding. It does not touch any data, logic or
+ * permission. The companion nusadaya_desk.js blocks Frappe links and renames
+ * strings. Remove the `app_include_css` / `app_include_js` lines in hooks.py
+ * to get stock Frappe back.
  *
  * Targets Frappe v15 (version-15-hotfix). Everything is layered as:
  *   1. design tokens  (--nd-*, plus the Frappe tokens they feed)
@@ -1065,3 +1067,22 @@ a[href*="frappetech" i] {
 	text-decoration: none;
 	opacity: 0.5;
 }
+
+/* ==========================================================================
+   5. NO FRAPPE WORDING
+   Hide Frappe-branded entries outright (they would otherwise show the word
+   "Frappe"). Renamed strings (theme name) are handled in nusadaya_desk.js.
+   ========================================================================== */
+/* Help menu: "Frappe Support" and "About" (the About dialog is all Frappe branding) */
+#toolbar-help a[href*="frappe.io" i],
+#toolbar-help button[onclick*="show_about"] {
+	display: none !important;
+}
+
+/* Report View sidebar ad ("Get more insights with Frappe Insights") and the
+   CRM / Helpdesk upsell banners on list sidebars */
+.list-sidebar .sidebar-section:has(> a[href*="frappe.io" i]),
+.layout-side-section .sidebar-section:has(> a[href*="frappe.io" i]) {
+	display: none !important;
+}
+

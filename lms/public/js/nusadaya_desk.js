@@ -1,10 +1,13 @@
 /*
- * Nusadaya Desk: turn every outbound Frappe / ERPNext link into a dead link.
+ * Nusadaya Desk branding.
  *
- * Covers the Help menu ("Frappe Support"), the About dialog (website, GitHub,
- * forum, social), help search results and any other anchor in Desk. Items stay
- * in place (Frappe refuses to delete standard navbar items); they just lead
- * nowhere. Loaded via `app_include_js` in hooks.py; delete that line to revert.
+ * 1. Every outbound Frappe / ERPNext link becomes a dead link (help results,
+ *    dialogs, any other anchor). Standard navbar items cannot be deleted in
+ *    Frappe, so entries that carry the Frappe name are hidden by CSS instead.
+ * 2. Visible strings that name Frappe are renamed through the `__()`
+ *    translation function (see RENAMES).
+ *
+ * Loaded via `app_include_js` in hooks.py; delete that line to revert.
  */
 (function () {
 	"use strict";
@@ -43,6 +46,26 @@
 		if (isFrappeUrl(String(url || ""))) return null;
 		return nativeOpen.apply(window, arguments);
 	};
+
+	// exact source strings -> replacement shown to users
+	var RENAMES = {
+		"Frappe Light": "Light", // theme switcher
+		"Frappe Framework": "Nusadaya Academy",
+		"Frappe Support": "Support",
+	};
+
+	var nativeTranslate = window.__;
+	if (typeof nativeTranslate === "function") {
+		window.__ = function (text) {
+			if (typeof text === "string" && Object.prototype.hasOwnProperty.call(RENAMES, text)) {
+				arguments[0] = RENAMES[text];
+			}
+			return nativeTranslate.apply(this, arguments);
+		};
+		for (var key in nativeTranslate) {
+			if (Object.prototype.hasOwnProperty.call(nativeTranslate, key)) window.__[key] = nativeTranslate[key];
+		}
+	}
 
 	window.nusadayaIsFrappeUrl = isFrappeUrl;
 })();
