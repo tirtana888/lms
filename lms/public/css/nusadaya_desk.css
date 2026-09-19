@@ -1044,3 +1044,24 @@ input[type="checkbox"]:checked {
 		transition-duration: 0.01ms !important;
 	}
 }
+
+/* ==========================================================================
+   4. DEAD FRAPPE LINKS
+   Outbound Frappe / ERPNext links stay in place but read as inactive. The
+   click itself is blocked in nusadaya_desk.js (this rule alone would not stop
+   keyboard activation).
+   ========================================================================== */
+a[href*="frappe.io" i],
+a[href*="frappe.school" i],
+a[href*="frappe.cloud" i],
+a[href*="frappecloud.com" i],
+a[href*="frappe.dev" i],
+a[href*="erpnext.com" i],
+a[href*="github.com/frappe" i],
+a[href*="frappe-tech" i],
+a[href*="frappetech" i] {
+	pointer-events: none;
+	cursor: default;
+	text-decoration: none;
+	opacity: 0.5;
+}
