@@ -18,6 +18,7 @@ import frappe
 import frappe.utils.password
 from frappe import _
 
+DEFAULT_BASE_URL = "https://getlearn-core-production.up.railway.app"
 REQUEST_TIMEOUT = 60
 MAX_MESSAGE_LENGTH = 1000
 # Per student: at most this many questions per window. getlearn.ai meters tokens per school,
@@ -46,7 +47,8 @@ def _config() -> tuple[str, str] | None:
 	api_key = frappe.utils.password.get_decrypted_password(
 		"LMS Settings", "LMS Settings", "getlearn_api_key", raise_exception=False
 	)
-	base_url = (settings.get("getlearn_base_url") or "").rstrip("/")
+	# Doctype defaults are not backfilled into an already-saved single, so fall back here.
+	base_url = (settings.get("getlearn_base_url") or DEFAULT_BASE_URL).rstrip("/")
 	if not api_key or not base_url:
 		return None
 	return base_url, api_key
