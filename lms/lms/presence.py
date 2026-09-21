@@ -26,6 +26,7 @@ from lms.lms.utils import (
 # Three missed 30-second pings.
 PRESENCE_TTL_SECONDS = 90
 MAX_TRACKED_USERS = 5000
+MAX_LISTED_USERS = 50
 MAX_FIELD_LENGTH = 140
 IGNORED_USERS = ("Administrator", "Guest")
 
@@ -47,10 +48,32 @@ def _detail_key(cache, user: str) -> str:
 	return cache.make_key(f"{_INDEX_KEY}:{user}")
 
 
+def _existing_since(cache, user: str) -> float | None:
+	"""When the user's current unbroken stay began, if their last ping is still within the TTL."""
+	raw = cache.get(_detail_key(cache, user))
+	if raw is None:
+		return None
+	try:
+		since = json.loads(raw).get("since")
+	except (TypeError, ValueError, AttributeError):
+		return None
+	return since if isinstance(since, (int, float)) else None
+
+
 def record_ping(cache, user: str, page: str | None, course: str | None, is_staff: bool, now_ts: float):
-	"""Mark `user` as present at `now_ts`. Repeated pings overwrite, so the state cannot grow."""
+	"""Mark `user` as present at `now_ts`. Repeated pings overwrite, so the state cannot grow.
+
+	`since` is when the current stay began: it carries over while pings keep arriving inside
+	the TTL, and restarts after a gap longer than that (tab closed, hidden or offline).
+	"""
+	since = _existing_since(cache, user)
+	detail = {
+		"page": _text(page),
+		"course": _text(course),
+		"staff": bool(is_staff),
+		"since": since if since is not None else now_ts,
+	}
 	cache.zadd(_index_key(cache), {user: now_ts})
-	detail = {"page": _text(page), "course": _text(course), "staff": bool(is_staff)}
 	cache.setex(name=_detail_key(cache, user), time=PRESENCE_TTL_SECONDS, value=json.dumps(detail))
 
 
@@ -113,16 +136,27 @@ def get_active_now():
 		frappe.throw(_("You are not permitted to view this dashboard."), frappe.PermissionError)
 
 	now_ts = time.time()
-	summary = summarize(read_present(frappe.cache(), now_ts))
+	present = read_present(frappe.cache(), now_ts)
+	summary = summarize(present)
 
+	course_names = {p["course"] for p in present if p.get("course")}
 	titles = {}
-	if summary["by_course"]:
+	if course_names:
 		titles = {
 			row.name: row.title
+			for row in frappe.get_all("LMS Course", {"name": ["in", list(course_names)]}, ["name", "title"])
+		}
+
+	people = {}
+	shown = sorted(present, key=lambda p: p.get("since") or 0, reverse=True)[:MAX_LISTED_USERS]
+	if shown:
+		people = {
+			row.name: row
 			for row in frappe.get_all(
-				"LMS Course", {"name": ["in", [c for c, _n in summary["by_course"]]]}, ["name", "title"]
+				"User", {"name": ["in", [p["user"] for p in shown]]}, ["name", "full_name", "user_image"]
 			)
 		}
+
 	return {
 		"learners": summary["learners"],
 		"staff": summary["staff"],
@@ -131,6 +165,23 @@ def get_active_now():
 			{"course": name, "title": titles.get(name) or name, "count": count}
 			for name, count in summary["by_course"]
 		],
+		"users": [describe_user(p, people.get(p["user"]), titles, now_ts) for p in shown],
 		"window_seconds": PRESENCE_TTL_SECONDS,
 		"as_of": frappe.utils.now_datetime().isoformat(),
+	}
+
+
+def describe_user(entry: dict, person, titles: dict, now_ts: float) -> dict:
+	"""One row of the dashboard list: who, where, since when and for how long."""
+	since = entry.get("since") or now_ts
+	course = entry.get("course")
+	return {
+		"user": entry["user"],
+		"full_name": (person.full_name if person else None) or entry["user"],
+		"user_image": person.user_image if person else None,
+		"staff": bool(entry.get("staff")),
+		"course": course,
+		"course_title": (titles.get(course) or course) if course else None,
+		"since": since,
+		"online_seconds": max(0, int(now_ts - since)),
 	}

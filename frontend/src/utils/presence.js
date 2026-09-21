@@ -75,3 +75,16 @@ export function usePresence() {
 		(loggedIn) => (loggedIn ? start() : stop())
 	)
 }
+
+/**
+ * "<1 min", "25 min", "1 h 5 min", "2 h": how long someone has been online, from seconds.
+ * Language-neutral abbreviations, so it needs no translation.
+ */
+export function formatOnlineFor(seconds) {
+	const minutes = Math.floor(Math.max(0, Number(seconds) || 0) / 60)
+	if (minutes < 1) return '<1 min'
+	if (minutes < 60) return `${minutes} min`
+	const hours = Math.floor(minutes / 60)
+	const rest = minutes % 60
+	return rest ? `${hours} h ${rest} min` : `${hours} h`
+}

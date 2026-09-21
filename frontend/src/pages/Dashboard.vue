@@ -244,15 +244,19 @@
 
 				<div class="border rounded-lg p-4">
 					<div class="font-medium text-ink-gray-9 mb-3">
-						{{ __('Online users ({0})').format(overview.data?.online_count ?? 0) }}
+						{{ __('Online users ({0})').format(onlineUsers.length) }}
 					</div>
-					<div v-if="overview.loading" class="flex justify-center py-6">
+					<div v-if="overview.loading && !onlineUsers.length" class="flex justify-center py-6">
 						<LoadingIndicator class="size-4 text-ink-gray-5" />
 					</div>
-					<div v-else-if="overview.data?.online_users?.length" class="space-y-3">
+					<div
+						v-else-if="onlineUsers.length"
+						class="space-y-3 max-h-96 overflow-y-auto"
+						data-testid="online-users"
+					>
 						<div
-							v-for="u in overview.data.online_users"
-							:key="u.name"
+							v-for="u in onlineUsers"
+							:key="u.user"
 							class="flex items-center gap-2.5"
 						>
 							<div class="relative shrink-0">
@@ -261,8 +265,19 @@
 									class="absolute -bottom-0.5 -end-0.5 size-2.5 rounded-full bg-surface-green-7 border-2 border-surface-base"
 								/>
 							</div>
-							<div class="text-p-sm text-ink-gray-9 truncate">
-								{{ u.full_name }}
+							<div class="min-w-0">
+								<div class="text-p-sm text-ink-gray-9 truncate">
+									{{ u.full_name }}
+									<span
+										v-if="u.staff"
+										class="ms-1 rounded bg-surface-gray-2 px-1.5 py-0.5 text-p-xs text-ink-gray-6"
+									>
+										{{ __('Staff') }}
+									</span>
+								</div>
+								<div class="text-p-xs text-ink-gray-5 truncate">
+									{{ onlineSubtitle(u) }}
+								</div>
 							</div>
 						</div>
 					</div>
@@ -312,6 +327,7 @@ import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import PageHeader from '@/components/Layouts/PageHeader.vue'
 import AdminHome from '@/pages/Home/AdminHome.vue'
 import { sessionStore } from '@/stores/session'
+import { formatOnlineFor } from '@/utils/presence'
 
 const { brand } = sessionStore()
 const dayjs = inject('$dayjs')
@@ -350,6 +366,34 @@ const activeNow = createResource({
 	url: 'lms.lms.presence.get_active_now',
 	auto: true,
 })
+// The Online users card: everyone the heartbeat sees (with since when and for how long),
+// then anyone the older last_active check still lists who is not sending heartbeats.
+const onlineUsers = computed(() => {
+	const present = (activeNow.data?.users ?? []).map((u) => ({ ...u, source: 'presence' }))
+	const seen = new Set(present.map((u) => u.user))
+	const recent = (overview.data?.online_users ?? [])
+		.filter((u) => !seen.has(u.name))
+		.map((u) => ({
+			user: u.name,
+			full_name: u.full_name,
+			user_image: u.user_image,
+			last_active: u.last_active,
+			source: 'last_active',
+		}))
+	return [...present, ...recent]
+})
+
+function onlineSubtitle(u) {
+	if (u.source !== 'presence') {
+		return __('Active {0}').format(dayjs(u.last_active).fromNow())
+	}
+	const since = dayjs.unix(u.since)
+	const at = since.isSame(dayjs(), 'day') ? since.format('HH:mm') : since.format('D MMM HH:mm')
+	const parts = [__('Online since {0}').format(at), formatOnlineFor(u.online_seconds)]
+	if (u.course_title) parts.push(u.course_title)
+	return parts.join(' · ')
+}
+
 let activeNowTimer = null
 onMounted(() => {
 	activeNowTimer = setInterval(() => {

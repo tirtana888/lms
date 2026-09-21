@@ -14,7 +14,7 @@ vi.mock('vue-router', () => ({ useRoute: () => route }))
 const session = reactive({ isLoggedIn: true })
 vi.mock('@/stores/session', () => ({ sessionStore: () => session }))
 
-import { PING_INTERVAL_MS, usePresence } from '@/utils/presence'
+import { PING_INTERVAL_MS, formatOnlineFor, usePresence } from '@/utils/presence'
 
 const Host = defineComponent({
 	setup() {
@@ -161,5 +161,27 @@ describe('usePresence', () => {
 		setVisibility('hidden')
 		setVisibility('visible')
 		expect(pings()).toHaveLength(1)
+	})
+})
+
+describe('formatOnlineFor', () => {
+	it.each([
+		[0, '<1 min'],
+		[59, '<1 min'],
+		[60, '1 min'],
+		[25 * 60 + 40, '25 min'],
+		[59 * 60 + 59, '59 min'],
+		[60 * 60, '1 h'],
+		[65 * 60, '1 h 5 min'],
+		[2 * 3600 + 30 * 60, '2 h 30 min'],
+		[26 * 3600, '26 h'],
+	])('%i seconds reads as %s', (seconds, text) => {
+		expect(formatOnlineFor(seconds)).toBe(text)
+	})
+
+	it('treats bad input as no time at all', () => {
+		expect(formatOnlineFor(-30)).toBe('<1 min')
+		expect(formatOnlineFor(undefined as unknown as number)).toBe('<1 min')
+		expect(formatOnlineFor('abc' as unknown as number)).toBe('<1 min')
 	})
 })

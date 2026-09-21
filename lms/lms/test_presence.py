@@ -4,6 +4,7 @@ import unittest
 from lms.lms.presence import (
 	MAX_FIELD_LENGTH,
 	PRESENCE_TTL_SECONDS,
+	describe_user,
 	read_present,
 	record_ping,
 	summarize,
@@ -35,6 +36,10 @@ class FakeCache:
 
 	def setex(self, name, time, value):
 		self.values[name] = (value, self.now + time)
+
+	def get(self, name):
+		value = self.values.get(name)
+		return value[0].encode() if value and value[1] > self.now else None
 
 	def mget(self, names):
 		out = []
@@ -111,7 +116,59 @@ class TestPresence(unittest.TestCase):
 	def test_detail_is_stored_as_json(self):
 		self.ping("a@x.id", course="ekonomi")
 		raw, _expires = self.cache.values["site|lms_presence:a@x.id"]
-		self.assertEqual(json.loads(raw), {"page": "CourseDetail", "course": "ekonomi", "staff": False})
+		self.assertEqual(
+			json.loads(raw), {"page": "CourseDetail", "course": "ekonomi", "staff": False, "since": 0.0}
+		)
+
+	def since(self, user):
+		return next(p["since"] for p in read_present(self.cache, self.cache.now) if p["user"] == user)
+
+	def test_since_is_the_first_ping_of_the_stay(self):
+		self.cache.now = 1000
+		self.ping("a@x.id")
+		self.assertEqual(self.since("a@x.id"), 1000)
+
+	def test_since_survives_later_pings_while_the_stay_continues(self):
+		self.cache.now = 1000
+		self.ping("a@x.id")
+		for _ in range(6):
+			self.cache.now += 30
+			self.ping("a@x.id")
+		self.assertEqual(self.since("a@x.id"), 1000)
+
+	def test_since_survives_a_change_of_page(self):
+		self.cache.now = 1000
+		self.ping("a@x.id", course="a")
+		self.cache.now += 30
+		self.ping("a@x.id", course="b")
+		self.assertEqual(self.since("a@x.id"), 1000)
+
+	def test_since_restarts_after_a_gap_longer_than_the_ttl(self):
+		self.cache.now = 1000
+		self.ping("a@x.id")
+		self.cache.now += PRESENCE_TTL_SECONDS + 10
+		self.ping("a@x.id")
+		self.assertEqual(self.since("a@x.id"), 1000 + PRESENCE_TTL_SECONDS + 10)
+
+	def test_a_missed_ping_inside_the_ttl_does_not_restart_the_stay(self):
+		self.cache.now = 1000
+		self.ping("a@x.id")
+		self.cache.now += PRESENCE_TTL_SECONDS - 5
+		self.ping("a@x.id")
+		self.assertEqual(self.since("a@x.id"), 1000)
+
+	def test_each_user_has_their_own_since(self):
+		self.cache.now = 1000
+		self.ping("a@x.id")
+		self.cache.now = 1050
+		self.ping("b@x.id")
+		self.assertEqual((self.since("a@x.id"), self.since("b@x.id")), (1000, 1050))
+
+	def test_old_records_without_since_are_treated_as_a_new_stay(self):
+		self.cache.now = 1000
+		self.cache.values["site|lms_presence:a@x.id"] = (json.dumps({"page": "x", "staff": False}), 1050)
+		self.ping("a@x.id")
+		self.assertEqual(self.since("a@x.id"), 1000)
 
 
 class TestSummarize(unittest.TestCase):
@@ -147,3 +204,41 @@ class TestSummarize(unittest.TestCase):
 		self.assertEqual(
 			summarize([]), {"learners": 0, "staff": 0, "on_course_pages": 0, "by_course": []}
 		)
+
+
+class Person:
+	def __init__(self, full_name, user_image=None):
+		self.full_name = full_name
+		self.user_image = user_image
+
+
+class TestDescribeUser(unittest.TestCase):
+	def entry(self, **kw):
+		return {"user": "a@x.id", "course": "ekonomi", "staff": False, "since": 1000, **kw}
+
+	def test_reports_how_long_the_stay_has_lasted(self):
+		row = describe_user(self.entry(), Person("Ayu", "/img.png"), {"ekonomi": "Ekonomi Kreatif"}, 1000 + 25 * 60)
+		self.assertEqual(row["online_seconds"], 25 * 60)
+		self.assertEqual(row["since"], 1000)
+		self.assertEqual((row["full_name"], row["user_image"]), ("Ayu", "/img.png"))
+		self.assertEqual(row["course_title"], "Ekonomi Kreatif")
+
+	def test_falls_back_to_the_user_id_without_a_profile(self):
+		self.assertEqual(describe_user(self.entry(), None, {}, 1100)["full_name"], "a@x.id")
+
+	def test_falls_back_to_the_course_id_without_a_title(self):
+		self.assertEqual(describe_user(self.entry(), None, {}, 1100)["course_title"], "ekonomi")
+
+	def test_no_course_means_no_course_title(self):
+		row = describe_user(self.entry(course=None), None, {}, 1100)
+		self.assertIsNone(row["course_title"])
+
+	def test_duration_never_goes_negative(self):
+		self.assertEqual(describe_user(self.entry(since=2000), None, {}, 1000)["online_seconds"], 0)
+
+	def test_missing_since_counts_as_just_arrived(self):
+		row = describe_user(self.entry(since=None), None, {}, 5000)
+		self.assertEqual((row["since"], row["online_seconds"]), (5000, 0))
+
+	def test_staff_flag_is_carried(self):
+		self.assertTrue(describe_user(self.entry(staff=True), None, {}, 1100)["staff"])
