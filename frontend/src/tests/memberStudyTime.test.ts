@@ -98,8 +98,8 @@ describe('MemberStudyTime', () => {
 		expect(bars[2].attributes('style')).toContain('height: 100%')
 		expect(bars[1].attributes('style')).toContain('height: 50%')
 		expect(bars[0].attributes('style')).toContain('height: 2px')
-		expect(bars[2].classes()).toContain('bg-surface-blue-3')
-		expect(bars[0].classes()).not.toContain('bg-surface-blue-3')
+		expect(bars[2].classes()).toContain('bg-surface-blue-2')
+		expect(bars[0].classes()).not.toContain('bg-surface-blue-2')
 	})
 
 	it('keeps a short day visible next to a very long one', async () => {

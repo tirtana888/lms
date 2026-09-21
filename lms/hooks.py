@@ -176,6 +176,10 @@ scheduler_events = {
 
 fixtures = ["Custom Field", "Function", "Industry", "LMS Category"]
 
+# frappe.clear_cache() (run by every `bench migrate`) deletes all site keys in Redis; the study-time
+# counters not yet flushed to LMS Study Day must survive it.
+persistent_cache_keys = ["lms_presence_pending"]
+
 # Testing
 # -------
 

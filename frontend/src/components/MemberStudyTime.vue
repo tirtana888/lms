@@ -26,7 +26,7 @@
 					v-for="day in bars"
 					:key="day.date"
 					class="flex-1 rounded-t-sm"
-					:class="day.isToday ? 'bg-surface-blue-3' : day.seconds ? 'bg-surface-gray-5' : 'bg-surface-gray-2'"
+					:class="day.isToday ? 'bg-surface-blue-2' : day.seconds ? 'bg-surface-gray-4' : 'bg-surface-gray-2'"
 					:style="{ height: day.height }"
 					:title="day.title"
 				/>

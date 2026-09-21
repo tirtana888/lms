@@ -20,6 +20,7 @@ from datetime import datetime, timedelta
 
 import frappe
 from frappe import _
+from frappe.utils import add_days, now_datetime, nowdate
 
 from lms.lms.utils import (
 	PRIVILEGED_ROLES,
@@ -102,7 +103,8 @@ def record_ping(
 	continuing = last is not None and since is not None and 0 <= now_ts - last <= PRESENCE_TTL_SECONDS
 
 	if continuing:
-		credited = int(now_ts - last)
+		# Round, don't truncate: pings ~30.4s apart would otherwise lose ~1s each.
+		credited = round(now_ts - last)
 		if credited:
 			cache.hincrby(_pending_key(cache), f"{day}|{user}|s", credited)
 	else:
@@ -273,7 +275,7 @@ def ping(page: str = None, course: str = None):
 	if user in IGNORED_USERS:
 		return {"tracked": False}
 	is_staff = bool(PRIVILEGED_ROLES.intersection(frappe.get_roles(user)))
-	record_ping(frappe.cache(), user, page, course, is_staff, time.time(), frappe.utils.nowdate())
+	record_ping(frappe.cache(), user, page, course, is_staff, time.time(), nowdate())
 	return {"tracked": True}
 
 
@@ -301,7 +303,7 @@ def get_active_now():
 	shown = sorted(present, key=lambda p: p.get("since") or 0, reverse=True)[:MAX_LISTED_USERS]
 	if shown:
 		names = [p["user"] for p in shown]
-		today = frappe.utils.nowdate()
+		today = nowdate()
 		people = {
 			row.name: row
 			for row in frappe.get_all("User", {"name": ["in", names]}, ["name", "full_name", "user_image"])
@@ -328,7 +330,7 @@ def get_active_now():
 			for p in shown
 		],
 		"window_seconds": PRESENCE_TTL_SECONDS,
-		"as_of": frappe.utils.now_datetime().isoformat(),
+		"as_of": now_datetime().isoformat(),
 	}
 
 
@@ -356,8 +358,8 @@ def get_study_time(member: str, days: int = 30):
 		frappe.throw(_("You are not permitted to view this."), frappe.PermissionError)
 
 	days = max(1, min(int(days or 30), MAX_HISTORY_DAYS))
-	today = frappe.utils.nowdate()
-	start = frappe.utils.add_days(today, -(days - 1))
+	today = nowdate()
+	start = add_days(today, -(days - 1))
 
 	saved = frappe.get_all(
 		"LMS Study Day",
