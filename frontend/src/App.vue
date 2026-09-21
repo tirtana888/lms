@@ -15,6 +15,7 @@ import { computed } from 'vue'
 import { useScreenSize } from './utils/composables'
 import { useSettings } from '@/stores/settings'
 import { useRoute } from 'vue-router'
+import { usePresence } from '@/utils/presence'
 import DesktopLayout from './components/Layouts/DesktopLayout.vue'
 import MobileLayout from './components/Layouts/MobileLayout.vue'
 import NoSidebarLayout from './components/Layouts/NoSidebarLayout.vue'
@@ -24,6 +25,9 @@ import NotificationPanel from '@/components/Notifications/NotificationPanel.vue'
 const { isMobile } = useScreenSize()
 const route = useRoute()
 const { settings } = useSettings()
+
+// Heartbeat behind the dashboard's live "Active learners" indicator.
+usePresence()
 
 // Derive the layout from the current route, not a navigation guard. Flipping it
 // in beforeEach swaps the layout the instant a navigation starts (before a lazy

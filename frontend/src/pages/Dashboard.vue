@@ -12,6 +12,58 @@
 		</div>
 
 		<div v-if="activeTab === 'dashboard'" class="p-5 space-y-5">
+			<div
+				class="border rounded-lg p-4 flex flex-wrap items-center gap-x-8 gap-y-3"
+				data-testid="active-now"
+			>
+				<div class="flex items-center gap-3">
+					<span class="relative flex size-3 shrink-0">
+						<span
+							v-if="activeNow.data?.learners"
+							class="absolute inline-flex size-full rounded-full bg-surface-green-7 opacity-60 animate-ping motion-reduce:animate-none"
+						/>
+						<span
+							class="relative inline-flex size-3 rounded-full"
+							:class="activeNow.data?.learners ? 'bg-surface-green-7' : 'bg-surface-gray-4'"
+						/>
+					</span>
+					<div>
+						<div class="text-2xl-bold text-ink-gray-9 tabular-nums leading-none">
+							{{ activeNow.data?.learners ?? 0 }}
+						</div>
+						<div class="text-p-sm text-ink-gray-6 mt-1">
+							{{ __('Active learners now') }}
+						</div>
+					</div>
+				</div>
+				<div class="text-p-sm text-ink-gray-5 max-w-xs">
+					{{ __('Learners with the LMS open in a visible tab. Refreshes every 30 seconds.') }}
+					<span v-if="activeNow.data?.staff">
+						{{ __('{0} staff also online.').format(activeNow.data.staff) }}
+					</span>
+				</div>
+				<div
+					v-if="activeNow.data?.courses?.length || activeNow.data?.elsewhere"
+					class="flex flex-wrap gap-2 sm:ms-auto"
+				>
+					<span
+						v-for="c in activeNow.data.courses"
+						:key="c.course"
+						class="inline-flex items-center gap-1.5 rounded-full bg-surface-gray-2 px-2.5 py-1 text-p-sm text-ink-gray-8"
+					>
+						<span class="truncate max-w-56">{{ c.title }}</span>
+						<span class="font-medium tabular-nums">{{ c.count }}</span>
+					</span>
+					<span
+						v-if="activeNow.data.elsewhere"
+						class="inline-flex items-center gap-1.5 rounded-full bg-surface-gray-2 px-2.5 py-1 text-p-sm text-ink-gray-6"
+					>
+						{{ __('Elsewhere') }}
+						<span class="font-medium tabular-nums">{{ activeNow.data.elsewhere }}</span>
+					</span>
+				</div>
+			</div>
+
 			<div class="border rounded-lg overflow-hidden">
 				<div class="p-4 border-b flex items-center gap-2">
 					<span class="lucide-school size-4 text-ink-gray-6" />
@@ -256,7 +308,7 @@ import {
 	TabButtons,
 	usePageMeta,
 } from 'frappe-ui'
-import { computed, inject, ref, watch } from 'vue'
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import PageHeader from '@/components/Layouts/PageHeader.vue'
 import AdminHome from '@/pages/Home/AdminHome.vue'
 import { sessionStore } from '@/stores/session'
@@ -290,6 +342,23 @@ const overview = createResource({
 	cache: ['dashboard_overview'],
 	auto: true,
 })
+
+// Who has the LMS open right now (heartbeat-based, see lms/lms/presence.py). Unlike the
+// resources above it is not cached and is polled, because a stale number defeats the point.
+const ACTIVE_NOW_REFRESH_MS = 30000
+const activeNow = createResource({
+	url: 'lms.lms.presence.get_active_now',
+	auto: true,
+})
+let activeNowTimer = null
+onMounted(() => {
+	activeNowTimer = setInterval(() => {
+		if (activeTab.value === 'dashboard' && document.visibilityState === 'visible') {
+			activeNow.reload()
+		}
+	}, ACTIVE_NOW_REFRESH_MS)
+})
+onBeforeUnmount(() => clearInterval(activeNowTimer))
 
 const signupsChart = createResource({
 	url: 'lms.lms.utils.get_chart_data',
