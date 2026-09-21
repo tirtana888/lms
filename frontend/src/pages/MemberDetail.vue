@@ -93,6 +93,8 @@
 						</div>
 					</div>
 
+					<MemberStudyTime :member="memberID" />
+
 					<div>
 						<div class="text-p-sm-medium text-ink-gray-7 mb-2">{{ __('Tags') }}</div>
 						<div class="flex flex-wrap items-center gap-1.5">
@@ -365,6 +367,7 @@ import { computed, inject, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import BooleanSwitch from '@/components/Controls/BooleanSwitch.vue'
 import HeaderButton from '@/components/HeaderButton.vue'
+import MemberStudyTime from '@/components/MemberStudyTime.vue'
 import PageHeader from '@/components/Layouts/PageHeader.vue'
 import SkeletonLoader from '@/components/SkeletonLoader.vue'
 import { notifyMembersChanged } from '@/stores/members'

@@ -4,7 +4,11 @@ import unittest
 from lms.lms.presence import (
 	MAX_FIELD_LENGTH,
 	PRESENCE_TTL_SECONDS,
+	day_series,
 	describe_user,
+	flush_pending,
+	parse_pending,
+	pending_seconds,
 	read_present,
 	record_ping,
 	summarize,
@@ -18,6 +22,7 @@ class FakeCache:
 		self.now = 0.0
 		self.zsets: dict[str, dict[str, float]] = {}
 		self.values: dict[str, tuple[str, float]] = {}
+		self.hashes: dict[str, dict[str, int]] = {}
 
 	def make_key(self, key):
 		return f"site|{key}"
@@ -40,6 +45,27 @@ class FakeCache:
 	def get(self, name):
 		value = self.values.get(name)
 		return value[0].encode() if value and value[1] > self.now else None
+
+	def hincrby(self, name, field, amount):
+		h = self.hashes.setdefault(name, {})
+		h[field] = h.get(field, 0) + amount
+		return h[field]
+
+	def hmget(self, name, fields):
+		h = self.hashes.get(name, {})
+		return [str(h[f]).encode() if f in h else None for f in fields]
+
+	def rename(self, src, dst):
+		if src not in self.hashes:
+			raise KeyError("no such key")
+		self.hashes[dst] = self.hashes.pop(src)
+
+	def execute_command(self, command, name):
+		assert command == "HGETALL"
+		return {f.encode(): str(v).encode() for f, v in self.hashes.get(name, {}).items()}
+
+	def delete(self, name):
+		self.hashes.pop(name, None)
 
 	def mget(self, names):
 		out = []
@@ -117,7 +143,8 @@ class TestPresence(unittest.TestCase):
 		self.ping("a@x.id", course="ekonomi")
 		raw, _expires = self.cache.values["site|lms_presence:a@x.id"]
 		self.assertEqual(
-			json.loads(raw), {"page": "CourseDetail", "course": "ekonomi", "staff": False, "since": 0.0}
+			json.loads(raw),
+			{"page": "CourseDetail", "course": "ekonomi", "staff": False, "since": 0.0, "last": 0.0},
 		)
 
 	def since(self, user):
@@ -242,3 +269,177 @@ class TestDescribeUser(unittest.TestCase):
 
 	def test_staff_flag_is_carried(self):
 		self.assertTrue(describe_user(self.entry(staff=True), None, {}, 1100)["staff"])
+
+
+PENDING = "site|lms_presence_pending"
+DAY = "2026-09-21"
+
+
+class TestStudyTime(unittest.TestCase):
+	def setUp(self):
+		self.cache = FakeCache()
+
+	def ping(self, user="a@x.id", at=None):
+		if at is not None:
+			self.cache.now = at
+		record_ping(self.cache, user, "Lesson", None, False, self.cache.now, DAY)
+
+	def totals(self, user="a@x.id"):
+		h = self.cache.hashes.get(PENDING, {})
+		return h.get(f"{DAY}|{user}|s", 0), h.get(f"{DAY}|{user}|n", 0)
+
+	def test_first_ping_of_a_stay_credits_no_time_but_counts_a_session(self):
+		self.ping(at=1000)
+		self.assertEqual(self.totals(), (0, 1))
+
+	def test_time_between_pings_of_one_stay_is_credited(self):
+		for i in range(11):  # pings at 1000, 1030, ... 1300
+			self.ping(at=1000 + 30 * i)
+		self.assertEqual(self.totals(), (300, 1))
+
+	def test_a_gap_longer_than_the_ttl_credits_nothing_and_starts_a_new_session(self):
+		self.ping(at=1000)
+		self.ping(at=1030)
+		self.ping(at=1030 + PRESENCE_TTL_SECONDS + 60)
+		self.assertEqual(self.totals(), (30, 2))
+
+	def test_a_missed_ping_inside_the_ttl_is_still_credited(self):
+		self.ping(at=1000)
+		self.ping(at=1000 + 80)
+		self.assertEqual(self.totals(), (80, 1))
+
+	def test_two_tabs_do_not_double_count(self):
+		# Two tabs ping alternately every 15 seconds each: one minute of wall time.
+		for i in range(5):
+			self.ping(at=1000 + 15 * i)
+		self.assertEqual(self.totals(), (60, 1))
+
+	def test_users_are_counted_separately(self):
+		self.ping("a@x.id", at=1000)
+		self.ping("b@x.id", at=1010)
+		self.ping("a@x.id", at=1030)
+		self.assertEqual(self.totals("a@x.id"), (30, 1))
+		self.assertEqual(self.totals("b@x.id"), (0, 1))
+
+	def test_the_day_passed_in_is_the_one_credited(self):
+		record_ping(self.cache, "a@x.id", None, None, False, 1000, "2026-09-20")
+		record_ping(self.cache, "a@x.id", None, None, False, 1030, "2026-09-21")
+		h = self.cache.hashes[PENDING]
+		self.assertEqual(h["2026-09-20|a@x.id|n"], 1)
+		self.assertEqual(h["2026-09-21|a@x.id|s"], 30)
+
+	def test_a_clock_that_goes_backwards_starts_a_new_stay_instead_of_crediting(self):
+		self.ping(at=1000)
+		self.ping(at=900)
+		self.assertEqual(self.totals(), (0, 2))
+
+
+class TestParsePending(unittest.TestCase):
+	def test_groups_seconds_and_sessions_by_day_and_user(self):
+		raw = {b"2026-09-21|a@x.id|s": b"300", b"2026-09-21|a@x.id|n": b"2", b"2026-09-20|b@x.id|s": b"45"}
+		self.assertEqual(
+			parse_pending(raw),
+			{
+				("2026-09-21", "a@x.id"): {"seconds": 300, "sessions": 2},
+				("2026-09-20", "b@x.id"): {"seconds": 45, "sessions": 0},
+			},
+		)
+
+	def test_ignores_malformed_fields_and_values(self):
+		raw = {b"garbage": b"5", b"2026-09-21|a@x.id|x": b"5", b"2026-09-21|a@x.id|s": b"abc", b"2026-09-21|b@x.id|s": b"0"}
+		self.assertEqual(parse_pending(raw), {})
+
+	def test_a_pipe_inside_the_user_id_survives(self):
+		self.assertEqual(
+			parse_pending({b"2026-09-21|we|ird@x.id|s": b"9"}), {("2026-09-21", "we|ird@x.id"): {"seconds": 9, "sessions": 0}}
+		)
+
+
+class TestFlushPending(unittest.TestCase):
+	def setUp(self):
+		self.cache = FakeCache()
+		self.saved = []
+
+	def apply(self, day, user, seconds, sessions):
+		self.saved.append((day, user, seconds, sessions))
+
+	def fill(self):
+		self.cache.hashes[PENDING] = {f"{DAY}|a@x.id|s": 120, f"{DAY}|a@x.id|n": 1, f"{DAY}|b@x.id|s": 30}
+
+	def test_writes_each_user_day_once_and_empties_the_hash(self):
+		self.fill()
+		written = flush_pending(self.cache, self.apply)
+		self.assertEqual(written, 2)
+		self.assertCountEqual(self.saved, [(DAY, "a@x.id", 120, 1), (DAY, "b@x.id", 30, 0)])
+		self.assertNotIn(PENDING, self.cache.hashes)
+		self.assertFalse([k for k in self.cache.hashes if "flushing" in k])
+
+	def test_nothing_pending_is_a_no_op(self):
+		self.assertEqual(flush_pending(self.cache, self.apply), 0)
+		self.assertEqual(self.saved, [])
+
+	def test_a_second_flush_does_not_repeat_the_first(self):
+		self.fill()
+		flush_pending(self.cache, self.apply)
+		flush_pending(self.cache, self.apply)
+		self.assertEqual(len(self.saved), 2)
+
+	def test_a_failed_row_is_kept_for_the_next_flush(self):
+		self.fill()
+
+		def flaky(day, user, seconds, sessions):
+			if user == "a@x.id":
+				raise RuntimeError("db down")
+			self.saved.append((day, user, seconds, sessions))
+
+		self.assertEqual(flush_pending(self.cache, flaky), 1)
+		self.assertEqual(self.cache.hashes[PENDING], {f"{DAY}|a@x.id|s": 120, f"{DAY}|a@x.id|n": 1})
+		self.assertEqual(flush_pending(self.cache, self.apply), 1)
+		self.assertIn((DAY, "a@x.id", 120, 1), self.saved)
+
+	def test_pings_arriving_during_a_flush_are_kept(self):
+		self.fill()
+
+		fired = []
+
+		def apply_and_ping(day, user, seconds, sessions):
+			if fired:
+				return
+			fired.append(True)
+			record_ping(self.cache, "c@x.id", None, None, False, 5000, DAY)
+			record_ping(self.cache, "c@x.id", None, None, False, 5030, DAY)
+
+		flush_pending(self.cache, apply_and_ping)
+		self.assertEqual(self.cache.hashes[PENDING][f"{DAY}|c@x.id|s"], 30)
+
+
+class TestPendingSeconds(unittest.TestCase):
+	def test_reads_unflushed_seconds_per_user(self):
+		cache = FakeCache()
+		cache.hashes[PENDING] = {f"{DAY}|a@x.id|s": 90}
+		self.assertEqual(pending_seconds(cache, DAY, ["a@x.id", "b@x.id"]), {"a@x.id": 90, "b@x.id": 0})
+
+	def test_no_users(self):
+		self.assertEqual(pending_seconds(FakeCache(), DAY, []), {})
+
+
+class TestDaySeries(unittest.TestCase):
+	def test_has_one_entry_per_day_ending_today_with_zeros_for_gaps(self):
+		out = day_series({"2026-09-21": 300, "2026-09-19": 60}, "2026-09-21", 4)
+		self.assertEqual(
+			out,
+			[
+				{"date": "2026-09-18", "seconds": 0},
+				{"date": "2026-09-19", "seconds": 60},
+				{"date": "2026-09-20", "seconds": 0},
+				{"date": "2026-09-21", "seconds": 300},
+			],
+		)
+
+	def test_crosses_a_month_boundary(self):
+		out = day_series({}, "2026-10-02", 3)
+		self.assertEqual([d["date"] for d in out], ["2026-09-30", "2026-10-01", "2026-10-02"])
+
+	def test_describe_user_carries_todays_total(self):
+		row = describe_user({"user": "a@x.id", "since": 1000}, None, {}, 1100, 7800)
+		self.assertEqual(row["today_seconds"], 7800)

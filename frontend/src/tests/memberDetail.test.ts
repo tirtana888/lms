@@ -33,6 +33,12 @@ vi.mock('@/components/HeaderButton.vue', () => ({
 	},
 }))
 
+// Study time has its own data source and tests (memberStudyTime.test.ts); here it would
+// only compete for the shared createResource mock below.
+vi.mock('@/components/MemberStudyTime.vue', () => ({
+	default: { template: `<div data-testid="member-study-time" />` },
+}))
+
 vi.mock('frappe-ui', () => ({
 	call: callMock,
 	createResource: createResourceMock,

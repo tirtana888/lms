@@ -149,6 +149,12 @@ scheduler_events = {
 	"all": [
 		"lms.sqlite.build_index_in_background",
 	],
+	"cron": {
+		# Moves the study-time counters accumulated in Redis into LMS Study Day rows.
+		"*/5 * * * *": [
+			"lms.lms.presence.flush_pending",
+		],
+	},
 	"hourly": [
 		"lms.lms.doctype.lms_certificate_request.lms_certificate_request.schedule_evals",
 		"lms.lms.doctype.lms_course.lms_course.update_course_statistics",

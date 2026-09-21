@@ -265,7 +265,7 @@
 									class="absolute -bottom-0.5 -end-0.5 size-2.5 rounded-full bg-surface-green-7 border-2 border-surface-base"
 								/>
 							</div>
-							<div class="min-w-0">
+							<div class="min-w-0 flex-1">
 								<div class="text-p-sm text-ink-gray-9 truncate">
 									{{ u.full_name }}
 									<span
@@ -278,6 +278,12 @@
 								<div class="text-p-xs text-ink-gray-5 truncate">
 									{{ onlineSubtitle(u) }}
 								</div>
+							</div>
+							<div v-if="u.source === 'presence'" class="shrink-0 text-end">
+								<div class="text-p-sm text-ink-gray-9 tabular-nums">
+									{{ u.today_seconds > 0 ? formatOnlineFor(u.today_seconds) : '—' }}
+								</div>
+								<div class="text-p-xs text-ink-gray-5">{{ __('today') }}</div>
 							</div>
 						</div>
 					</div>
