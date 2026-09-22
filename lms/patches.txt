@@ -135,3 +135,4 @@ lms.patches.v2_0.seed_email_notifications #15-09-2026
 lms.patches.v2_0.seed_drip_unlock_notification #16-09-2026
 lms.patches.v2_0.backfill_drip_notification_log #16-09-2026
 lms.patches.v2_0.seed_default_email_templates #16-09-2026
+execute:from lms.patches.v2_0.reconcile_custom_docperm_permlevels import reconcile; reconcile(["LMS Assignment"])
