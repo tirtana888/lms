@@ -40,11 +40,15 @@
 				<TabButtons :options="tabOptions" v-model="activeTab" class="w-fit" />
 			</div>
 
-			<!-- One card frames every tab, so switching between a tall tab (Overview)
-			     and a short one (a bare list, or "No X yet") doesn't make the page
-			     itself lurch — min-h keeps a short tab from collapsing to a sliver;
-			     Overview's own content still grows past it as it always did. -->
-			<div class="rounded-lg border border-outline-gray-2 p-5 min-h-[26rem]">
+			<!-- One card, one fixed height, for every tab: Overview is much longer than
+			     a bare list like Courses or Quizzes, and giving it only a floor (min-h)
+			     still let it tower over the short tabs when switching. A fixed height
+			     with its own scrollbar keeps the card the same size no matter which tab
+			     is open — only its *content* scrolls — the same pattern already used for
+			     the Dashboard's Online users card. Dropdowns/tooltips inside a tab (the
+			     course-row "..." menu, tag suggestions) render in a portal to <body>, so
+			     this overflow never clips them. -->
+			<div class="rounded-lg border border-outline-gray-2 p-5 h-[30rem] overflow-y-auto">
 			<div v-if="activeTab === 'Roles'" data-testid="member-roles" class="flex flex-col gap-2">
 				<div class="grid md:grid-cols-2 gap-x-6 gap-y-3">
 					<BooleanSwitch size="sm" :label="__('Student')" v-model="roles.lms_student" />
