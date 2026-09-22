@@ -40,6 +40,11 @@
 				<TabButtons :options="tabOptions" v-model="activeTab" class="w-fit" />
 			</div>
 
+			<!-- One card frames every tab, so switching between a tall tab (Overview)
+			     and a short one (a bare list, or "No X yet") doesn't make the page
+			     itself lurch — min-h keeps a short tab from collapsing to a sliver;
+			     Overview's own content still grows past it as it always did. -->
+			<div class="rounded-lg border border-outline-gray-2 p-5 min-h-[26rem]">
 			<div v-if="activeTab === 'Roles'" data-testid="member-roles" class="flex flex-col gap-2">
 				<div class="grid md:grid-cols-2 gap-x-6 gap-y-3">
 					<BooleanSwitch size="sm" :label="__('Student')" v-model="roles.lms_student" />
@@ -356,6 +361,7 @@
 					</div>
 				</div>
 			</template>
+			</div>
 			</div>
 		</div>
 	</template>
