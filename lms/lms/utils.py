@@ -660,27 +660,50 @@ def get_chart_data(
 @frappe.whitelist(allow_guest=True)
 @rate_limit(limit=500, seconds=60 * 60)
 def get_active_learners_chart(from_date: str = None, to_date: str = None):
-	"""Daily count of distinct users who logged in, for the Dashboard's
+	"""Daily count of distinct learners who did something, for the Dashboard's
 	"Active learners" chart.
 
 	Not built on Dashboard Chart / get_chart_data like the sibling charts on
 	this page: that mechanism's chart_type is Count, Sum, Average, Group By,
-	Custom or Report - none of them a distinct count, so a chart built the
-	normal way over Activity Log would count login *events*, not learners,
-	overcounting anyone who logs in more than once a day. Confirmed this is
-	not hypothetical - on this site, one day had 39 login events from only
-	29 distinct users, a third higher than the real number.
+	Custom or Report - none of them a distinct count across several tables.
+
+	A learner is active on a day if they logged in, made lesson progress,
+	submitted a quiz or an assignment, or had the LMS open (LMS Study Day).
+	Logins alone badly undercount: a Frappe session stays valid for days, so a
+	student who studies on Monday with Friday's login leaves no login event at
+	all (one day here showed 2 logins against 12 learners actually working).
+	Staff and system accounts are left out - this counts learners.
 	"""
 	from_date, to_date = get_chart_date_range(from_date, to_date)
 	rows = frappe.db.sql(
 		"""
-		SELECT DATE(creation) AS day, COUNT(DISTINCT user) AS count
-		FROM `tabActivity Log`
-		WHERE operation = 'Login' AND status = 'Success'
-			AND creation BETWEEN %(from_date)s AND %(to_date)s
+		SELECT day, COUNT(DISTINCT member) AS count
+		FROM (
+			SELECT DATE(creation) AS day, user AS member FROM `tabActivity Log`
+				WHERE operation = 'Login' AND status = 'Success'
+				AND creation BETWEEN %(from_date)s AND %(to_date)s
+			UNION ALL
+			SELECT DATE(modified), member FROM `tabLMS Course Progress`
+				WHERE modified BETWEEN %(from_date)s AND %(to_date)s
+			UNION ALL
+			SELECT DATE(creation), member FROM `tabLMS Quiz Submission`
+				WHERE creation BETWEEN %(from_date)s AND %(to_date)s
+			UNION ALL
+			SELECT DATE(creation), member FROM `tabLMS Assignment Submission`
+				WHERE creation BETWEEN %(from_date)s AND %(to_date)s
+			UNION ALL
+			SELECT `date`, member FROM `tabLMS Study Day`
+				WHERE seconds > 0 AND `date` BETWEEN DATE(%(from_date)s) AND DATE(%(to_date)s)
+		) AS activity
+		WHERE member IS NOT NULL
+			AND member NOT IN ('Administrator', 'Guest')
+			AND member NOT IN (
+				SELECT parent FROM `tabHas Role`
+				WHERE parenttype = 'User' AND parent IS NOT NULL AND role IN %(staff_roles)s
+			)
 		GROUP BY day
 		""",
-		{"from_date": from_date, "to_date": to_date},
+		{"from_date": from_date, "to_date": to_date, "staff_roles": tuple(PRIVILEGED_ROLES)},
 		as_dict=True,
 	)
 	counts_by_day = {row.day: row.count for row in rows}
