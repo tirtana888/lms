@@ -10,6 +10,7 @@
  "engine": "InnoDB",
  "field_order": [
   "title",
+  "authors",
   "type",
   "grade_assignment",
   "course",
@@ -89,6 +90,12 @@
    "fieldtype": "Link",
    "label": "Course",
    "options": "LMS Course"
+  },
+  {
+   "fieldname": "authors",
+   "fieldtype": "Table MultiSelect",
+   "label": "Authors",
+   "options": "LMS Content Author"
   },
   {
    "fieldname": "section_break_schedule",
@@ -174,7 +181,7 @@
    "link_fieldname": "assignment"
   }
  ],
- "modified": "2026-09-08 00:00:00.000000",
+ "modified": "2026-09-08 02:30:00.000000",
  "modified_by": "sayali@frappe.io",
  "module": "LMS",
  "name": "LMS Assignment",
@@ -217,6 +224,7 @@
   },
   {
    "create": 1,
+   "delete": 1,
    "email": 1,
    "export": 1,
    "import": 1,
@@ -229,6 +237,7 @@
   },
   {
    "create": 1,
+   "delete": 1,
    "email": 1,
    "export": 1,
    "import": 1,
