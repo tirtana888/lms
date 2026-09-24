@@ -14,6 +14,7 @@
   "multiple",
   "marks",
   "topic",
+  "authors",
   "section_break_ytxi",
   "option_1",
   "is_correct_1",
@@ -422,6 +423,12 @@
    "fieldname": "possibility_10",
    "fieldtype": "Small Text",
    "label": "Possible Answer 10"
+  },
+  {
+   "fieldname": "authors",
+   "fieldtype": "Table MultiSelect",
+   "label": "Authors",
+   "options": "LMS Content Author"
   }
  ],
  "grid_page_length": 50,
