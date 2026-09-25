@@ -10,9 +10,10 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { flushPromises, shallowMount } from '@vue/test-utils'
 
-const { paramsSeen, pending } = vi.hoisted(() => ({
+const { paramsSeen, pending, routeState } = vi.hoisted(() => ({
 	paramsSeen: [] as any[],
 	pending: [] as Array<(rows: any[]) => void>,
+	routeState: { query: {} as Record<string, string> },
 }))
 
 vi.mock('frappe-ui', () => ({
@@ -43,7 +44,10 @@ vi.mock('frappe-ui/frappe', () => ({
 	useTelemetry: () => ({ capture: vi.fn() }),
 }))
 
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
+vi.mock('vue-router', () => ({
+	useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+	useRoute: () => routeState,
+}))
 
 vi.mock('@/stores/session', () => ({ sessionStore: () => ({ brand: {} }) }))
 
@@ -53,6 +57,13 @@ vi.mock('@/utils', () => ({
 
 vi.stubGlobal('__', (text: string) => text)
 
+// frappe's translation layer patches String.prototype.format onto the page at
+// runtime; the toasts and dialog text these components build rely on it.
+;(String.prototype as any).format = function (this: string, ...args: unknown[]): string {
+	return this.replace(/{(\d+)}/g, (_match, index) => String(args[Number(index)]))
+}
+
+import { call } from 'frappe-ui'
 import Members from '@/pages/Members.vue'
 
 // Matches MEMBERS_PAGE_LENGTH in lms/lms/api.py (and the same-named constant
@@ -83,6 +94,9 @@ describe('Users page search', () => {
 	beforeEach(() => {
 		paramsSeen.length = 0
 		pending.length = 0
+		routeState.query = {}
+		vi.mocked(call).mockReset()
+		vi.mocked(call).mockResolvedValue(undefined)
 	})
 
 	it('fetches the first page on mount', () => {
@@ -188,5 +202,104 @@ describe('Users page search', () => {
 			vm.memberList.every((m: any) => m.name.startsWith('instructor'))
 		).toBe(true)
 		expect(vm.start).toBe(2)
+	})
+
+	describe('tags', () => {
+		it('sends no tag filter by default', () => {
+			mountMembers()
+
+			expect(paramsSeen.at(-1).tag).toBeUndefined()
+		})
+
+		it('sends the chosen tag to the server, starting over at the first page', async () => {
+			const vm = mountMembers().vm as any
+			await land(rows(MEMBERS_PAGE_LENGTH))
+
+			vm.currentTag = 'Beasiswa'
+			await flushPromises()
+
+			expect(paramsSeen.at(-1)).toMatchObject({ tag: 'Beasiswa', start: 0 })
+		})
+
+		it('starts on the tag named in the address', () => {
+			routeState.query = { tag: 'Tritunggal' }
+
+			mountMembers()
+
+			expect(paramsSeen.at(-1)).toMatchObject({ tag: 'Tritunggal' })
+		})
+
+		it('loads the tag list for the filter without touching the member paging', async () => {
+			vi.mocked(call).mockResolvedValue([{ tag: 'Beasiswa', count: 2 }])
+			const vm = mountMembers().vm as any
+			await flushPromises()
+
+			expect(call).toHaveBeenCalledWith('lms.lms.api.get_member_tags')
+			expect(vm.tagFilterOptions.map((o: any) => o.value)).toEqual(['All', 'Beasiswa'])
+			// only the member fetch is waiting on the queue
+			expect(pending).toHaveLength(1)
+		})
+
+		it('keeps an active filter selectable even when its tag is not in the list', () => {
+			routeState.query = { tag: 'Gone' }
+
+			const vm = mountMembers().vm as any
+
+			expect(vm.tagFilterOptions.map((o: any) => o.value)).toContain('Gone')
+		})
+
+		it('sends the selected members and the tag for a bulk add, then clears the selection', async () => {
+			const vm = mountMembers().vm as any
+			await land(rows(2))
+			const unselectAll = vi.fn()
+			vi.mocked(call).mockResolvedValue({ tag: 'Beasiswa', updated: 2, total: 2 })
+
+			vm.openBulkTag('add', new Set(['user0@x.com', 'user1@x.com']), unselectAll)
+			const change = vm.confirmBulkTag('Beasiswa')
+			await flushPromises()
+
+			expect(call).toHaveBeenCalledWith('lms.lms.api.bulk_add_member_tag', {
+				members: ['user0@x.com', 'user1@x.com'],
+				tag: 'Beasiswa',
+			})
+			expect(unselectAll).toHaveBeenCalled()
+			await land([])
+			await change
+		})
+
+		it('leaves out selected members that are no longer on screen', async () => {
+			const vm = mountMembers().vm as any
+			await land(rows(2))
+			vi.mocked(call).mockResolvedValue({ tag: 'Beasiswa', updated: 1, total: 1 })
+
+			// user9 was ticked under an earlier filter and is no longer listed
+			vm.openBulkTag('add', new Set(['user0@x.com', 'user9@x.com']), vi.fn())
+			const change = vm.confirmBulkTag('Beasiswa')
+			await flushPromises()
+
+			expect(call).toHaveBeenCalledWith('lms.lms.api.bulk_add_member_tag', {
+				members: ['user0@x.com'],
+				tag: 'Beasiswa',
+			})
+			await land([])
+			await change
+		})
+
+		it('uses the remove endpoint in remove mode', async () => {
+			const vm = mountMembers().vm as any
+			await land(rows(1))
+			vi.mocked(call).mockResolvedValue({ tag: 'Alumni', updated: 1, total: 1 })
+
+			vm.openBulkTag('remove', new Set(['user0@x.com']), vi.fn())
+			const change = vm.confirmBulkTag('Alumni')
+			await flushPromises()
+
+			expect(call).toHaveBeenCalledWith('lms.lms.api.bulk_remove_member_tag', {
+				members: ['user0@x.com'],
+				tag: 'Alumni',
+			})
+			await land([])
+			await change
+		})
 	})
 })

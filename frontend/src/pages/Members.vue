@@ -4,6 +4,7 @@
 		:title="__('Users')"
 		layout="list"
 		:columns="columns"
+		:list-options="listOptions"
 		:rows="memberList"
 		:loading="Boolean(members.loading)"
 		:has-next-page="hasNextPage"
@@ -32,6 +33,35 @@
 				:aria-label="__('Filter by role')"
 				:options="roleOptions"
 			/>
+			<Select
+				v-model="currentTag"
+				class="w-48"
+				:aria-label="__('Filter by tag')"
+				:options="tagFilterOptions"
+			/>
+		</template>
+
+		<template #selection-actions="{ unselectAll, selections }">
+			<Button
+				variant="ghost"
+				:label="__('Add tag')"
+				data-testid="bulk-add-tag"
+				@click="openBulkTag('add', selections, unselectAll)"
+			>
+				<template #prefix>
+					<span class="lucide-tag size-4" aria-hidden="true" />
+				</template>
+			</Button>
+			<Button
+				variant="ghost"
+				:label="__('Remove tag')"
+				data-testid="bulk-remove-tag"
+				@click="openBulkTag('remove', selections, unselectAll)"
+			>
+				<template #prefix>
+					<span class="lucide-tag size-4" aria-hidden="true" />
+				</template>
+			</Button>
 		</template>
 
 		<template #cell="{ column, row, value }">
@@ -131,6 +161,15 @@
 
 	<router-view />
 
+	<TagPickerDialog
+		v-model="showTagPicker"
+		:mode="tagPickerMode"
+		:count="bulkSelection.length"
+		:tags="tagRows"
+		:loading="bulkSaving"
+		@confirm="confirmBulkTag"
+	/>
+
 	<Dialog
 		v-model:open="showDeleteDialog"
 		:title="
@@ -170,13 +209,16 @@ import {
 	Tooltip,
 	usePageMeta,
 } from 'frappe-ui'
-import { inject, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
-import type { Breadcrumb, ListColumn, SessionUser } from '@/types'
+import { computed, inject, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import TagPickerDialog from '@/components/TagPickerDialog.vue'
+import type { TagRow } from '@/components/TagPickerDialog.vue'
+import type { Breadcrumb, ListColumn, ListViewOptions, SessionUser } from '@/types'
 import { sessionStore } from '@/stores/session'
 import { openFormRoute } from '@/composables/useFormRoute'
 import { membersRevision } from '@/stores/members'
 import { cleanError } from '@/utils'
+import { resourceErrorMessage } from '@/utils/resource'
 
 type Member = {
 	username: string
@@ -195,10 +237,13 @@ type Member = {
 const MEMBERS_PAGE_LENGTH = 13
 
 const router = useRouter()
+const route = useRoute()
 const user = inject('$user') as SessionUser
 const { brand } = sessionStore()
 const search = ref('')
 const currentRole = ref('All')
+// 'All' mirrors the role filter; a real tag arrives from ?tag= (the Tags page links here).
+const currentTag = ref(typeof route.query.tag === 'string' && route.query.tag ? route.query.tag : 'All')
 const start = ref(0)
 
 const roleOptions = [
@@ -254,9 +299,81 @@ const members = createResource({
 		search: search.value,
 		start: start.value,
 		role: currentRole.value,
+		tag: currentTag.value === 'All' ? undefined : currentTag.value,
 	}),
 	auto: false,
 })
+
+// --- tags: filter options + bulk change --------------------------------------
+// Fetched with call() rather than a resource: the member list's paging tokens
+// (and its tests) count createResource reloads, and this is not one of them.
+const tagRows = ref<TagRow[]>([])
+
+async function loadTags() {
+	try {
+		tagRows.value = ((await call('lms.lms.api.get_member_tags')) as TagRow[] | undefined) || []
+	} catch {
+		// The filter just stays at "All tags"; the list itself is unaffected.
+		tagRows.value = []
+	}
+}
+
+// A tag from the URL that is not in the fetched list (e.g. removed meanwhile)
+// still gets an option, so the Select never shows a blank for an active filter.
+const tagFilterOptions = computed(() => {
+	const options = [
+		{ label: __('All tags'), value: 'All' },
+		...tagRows.value.map((row) => ({ label: `${row.tag} (${row.count})`, value: row.tag })),
+	]
+	const active = currentTag.value
+	if (active !== 'All' && !options.some((option) => option.value === active)) {
+		options.push({ label: active, value: active })
+	}
+	return options
+})
+
+const listOptions: ListViewOptions = { selectable: true, showTooltip: false }
+
+const showTagPicker = ref(false)
+const tagPickerMode = ref<'add' | 'remove'>('add')
+const bulkSelection = ref<string[]>([])
+const bulkSaving = ref(false)
+let clearSelection: (() => void) | null = null
+
+const openBulkTag = (mode: 'add' | 'remove', selections: Set<string>, unselectAll: () => void) => {
+	tagPickerMode.value = mode
+	// Only rows still on screen: a filter change replaces the rows but the list
+	// can keep the old ticks, and a bulk change must never reach a member the
+	// admin can no longer see.
+	const visible = new Set(memberList.value.map((member) => member.name))
+	bulkSelection.value = Array.from(selections).filter((name) => visible.has(name))
+	clearSelection = unselectAll
+	showTagPicker.value = true
+}
+
+async function confirmBulkTag(tag: string) {
+	bulkSaving.value = true
+	try {
+		const result = await call(
+			tagPickerMode.value === 'add'
+				? 'lms.lms.api.bulk_add_member_tag'
+				: 'lms.lms.api.bulk_remove_member_tag',
+			{ members: bulkSelection.value, tag }
+		)
+		toast.success(
+			tagPickerMode.value === 'add'
+				? __('Tag "{0}" added to {1} members').format(result.tag, result.updated)
+				: __('Tag "{0}" removed from {1} members').format(result.tag, result.updated)
+		)
+		showTagPicker.value = false
+		clearSelection?.()
+		await Promise.all([refreshMembers(), loadTags()])
+	} catch (err) {
+		toast.error(resourceErrorMessage(err, __('Unable to change tags')))
+	} finally {
+		bulkSaving.value = false
+	}
+}
 
 // createResource carries no request sequence and aborts nothing, so two calls
 // in flight both resolve and both append: a role change mid-request would show
@@ -284,8 +401,26 @@ const refreshMembers = () => {
 	return fetchMembers()
 }
 
-watch([search, currentRole], () => {
+watch([search, currentRole, currentTag], () => {
 	refreshMembers()
+})
+
+// Followed from the address too, not only read once: a link to /users while
+// this page is already open on ?tag=X reuses the component.
+watch(
+	() => route.query.tag,
+	(tag) => {
+		const fromUrl = typeof tag === 'string' && tag ? tag : 'All'
+		if (fromUrl !== currentTag.value) currentTag.value = fromUrl
+	}
+)
+
+// Keep the address shareable: the tag filter is what the Tags page links to.
+watch(currentTag, (tag) => {
+	const query = { ...route.query }
+	if (tag === 'All') delete query.tag
+	else query.tag = tag
+	router.replace({ query })
 })
 
 // A member form saved while this page is still mounted behind it (desktop:
@@ -306,6 +441,7 @@ onMounted(() => {
 		router.push({ name: 'Home' })
 		return
 	}
+	loadTags()
 	refreshMembers()
 })
 

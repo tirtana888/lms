@@ -457,6 +457,11 @@ export const routes = [
 		],
 	},
 	{
+		path: '/tags',
+		name: 'Tags',
+		component: () => import('@/pages/Tags.vue'),
+	},
+	{
 		path: '/users/:memberID',
 		name: 'MemberForm',
 		component: () => import('@/pages/MemberDetail.vue'),

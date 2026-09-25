@@ -104,7 +104,7 @@
 
 					<MemberStudyTime :member="memberID" />
 
-					<div>
+					<div @focusin="loadKnownTags">
 						<div class="text-p-sm-medium text-ink-gray-7 mb-2">{{ __('Tags') }}</div>
 						<div class="flex flex-wrap items-center gap-1.5">
 							<Badge
@@ -133,8 +133,30 @@
 								variant="subtle"
 								:label="__('Add')"
 								data-testid="add-tag"
+								:disabled="newTagHasComma"
 								@click="handleAddTag()"
 							/>
+						</div>
+						<p v-if="newTagHasComma" class="mt-1.5 text-p-sm text-ink-red-4" role="alert">
+							{{ __('A tag cannot contain a comma.') }}
+						</p>
+						<div
+							v-if="tagSuggestions.length"
+							class="mt-2 flex flex-wrap items-center gap-1.5"
+							data-testid="tag-suggestions"
+						>
+							<span class="text-p-xs text-ink-gray-5">{{ __('Existing tags') }}</span>
+							<button
+								v-for="row in tagSuggestions"
+								:key="row.tag"
+								type="button"
+								class="flex items-center gap-1 rounded-md border px-2 py-0.5 text-p-xs text-ink-gray-7 hover:bg-surface-gray-2"
+								@click="handleAddTag(row.tag)"
+							>
+								<span class="lucide-plus size-3" aria-hidden="true" />
+								{{ row.tag }}
+								<span class="tabular-nums text-ink-gray-5">{{ row.count }}</span>
+							</button>
 						</div>
 					</div>
 
@@ -611,16 +633,50 @@ function formatDate(value: string | null | undefined, withTime = false): string 
 }
 
 const newTag = ref('')
+const newTagHasComma = computed(() => newTag.value.includes(','))
 
-async function handleAddTag() {
-	const tag = newTag.value.trim()
-	if (!tag || !overviewFetch.data) return
+// Tags already in use, offered so an admin picks the existing spelling instead
+// of typing a near-duplicate ("beasiswa" next to "Beasiswa"). Fetched the first
+// time the tag row is focused, so opening a member costs no extra request.
+type KnownTag = { tag: string; count: number }
+const knownTags = ref<KnownTag[]>([])
+let knownTagsRequested = false
+
+async function loadKnownTags() {
+	if (knownTagsRequested) return
+	knownTagsRequested = true
+	try {
+		knownTags.value = ((await call('lms.lms.api.get_member_tags')) as KnownTag[] | undefined) || []
+	} catch {
+		knownTagsRequested = false
+	}
+}
+
+const tagSuggestions = computed(() => {
+	const owned = new Set((overviewFetch.data?.tags || []).map((tag: string) => tag.toLowerCase()))
+	const needle = newTag.value.trim().toLowerCase()
+	return knownTags.value
+		.filter((row) => !owned.has(row.tag.toLowerCase()) && (!needle || row.tag.toLowerCase().includes(needle)))
+		.slice(0, 8)
+})
+
+// Keeps the suggestion counts honest after an add without another request.
+function noteTagAdded(tag: string) {
+	const known = knownTags.value.find((row) => row.tag.toLowerCase() === tag.toLowerCase())
+	if (known) known.count += 1
+	else if (knownTagsRequested) knownTags.value.push({ tag, count: 1 })
+}
+
+async function handleAddTag(picked?: string) {
+	const tag = (picked ?? newTag.value).trim()
+	if (!tag || newTagHasComma.value || !overviewFetch.data) return
 	try {
 		overviewFetch.data.tags = await call('lms.lms.api.add_member_tag', {
 			member: props.memberID,
 			tag,
 		})
 		newTag.value = ''
+		noteTagAdded(tag)
 	} catch (err: any) {
 		toast.error(errorMessage(err, __('Unable to add tag')))
 	}

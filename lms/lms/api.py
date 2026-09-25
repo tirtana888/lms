@@ -38,6 +38,17 @@ from frappe.utils.response import Response
 from pypika import functions as fn
 
 from lms.lms.course_import_export import export_course_zip, import_course_zip
+from lms.lms.tag_utils import (
+	MAX_BULK_MEMBERS,
+	TAG_MAX_LENGTH,
+	InvalidTag,
+	dedupe_tags,
+	format_tags,
+	normalize_tag,
+	same_tag,
+	tag_counts,
+	users_with_tag,
+)
 from lms.lms.doctype.course_lesson.course_lesson import (
 	cleanup_lesson_backreferences,
 	save_progress,
@@ -1176,7 +1187,7 @@ def get_member(member: str):
 
 
 @frappe.whitelist()
-def get_members(start: int = 0, search: str = None, role: str = "All"):
+def get_members(start: int = 0, search: str = None, role: str = "All", tag: str = None):
 	frappe.only_for(MEMBER_ADMIN_ROLES)
 
 	lms_roles = LMS_ROLES
@@ -1198,6 +1209,14 @@ def get_members(start: int = 0, search: str = None, role: str = "All"):
 		if not role_users:
 			return []
 		filters.append(["name", "in", role_users])
+
+	if tag:
+		if not isinstance(tag, str):
+			frappe.throw(_("Invalid tag filter."), frappe.ValidationError)
+		tagged = _users_with_tag(tag)
+		if not tagged:
+			return []
+		filters.append(["name", "in", tagged])
 
 	if search:
 		or_filters["full_name"] = ["like", f"%{search}%"]
@@ -1766,25 +1785,105 @@ def _validate_member(member: str) -> str:
 	return member
 
 
+def _clean_tag(raw) -> str:
+	try:
+		return normalize_tag(raw)
+	except InvalidTag as exc:
+		messages = {
+			"empty": _("Tag cannot be empty."),
+			"comma": _("A tag cannot contain a comma."),
+			"too_long": _("A tag can be at most {0} characters.").format(TAG_MAX_LENGTH),
+		}
+		frappe.throw(messages[str(exc)], frappe.ValidationError)
+
+
+def _canonical_tag(tag: str) -> str:
+	"""An existing Tag keeps its spelling: "beasiswa" resolves to "Beasiswa"."""
+	return frappe.db.get_value("Tag", tag, "name") or tag
+
+
+def _ensure_tag_master(tag: str) -> None:
+	if not frappe.db.exists("Tag", tag):
+		frappe.get_doc({"doctype": "Tag", "name": tag}).insert(ignore_permissions=True)
+
+
+def _sync_member_tag_links(member: str, tags: list[str]) -> None:
+	"""Keeps Frappe's Tag Link rows equal to the member's tags.
+
+	This is frappe.desk.doctype.tag.tag.update_tags without its
+	`doc.check_permission("write")`: a Moderator has no permission on User, so
+	the stock function raises for them. Access is checked by our callers
+	(`frappe.only_for`) instead. Without these rows Desk's Tag list undercounts.
+	"""
+	existing = set(
+		frappe.get_all("Tag Link", {"document_type": "User", "document_name": member}, pluck="tag")
+	)
+	wanted = set(tags)
+
+	title = frappe.db.get_value("User", member, "full_name") or ""
+	for tag in wanted - existing:
+		frappe.get_doc(
+			{
+				"doctype": "Tag Link",
+				"document_type": "User",
+				"document_name": member,
+				"title": title,
+				"tag": tag,
+			}
+		).insert(ignore_permissions=True)
+
+	for tag in existing - wanted:
+		frappe.db.delete("Tag Link", {"document_type": "User", "document_name": member, "tag": tag})
+
+
+def _set_member_tags(member: str, tags: list[str]) -> list[str]:
+	tags = dedupe_tags(tags)
+	for tag in tags:
+		_ensure_tag_master(tag)
+	frappe.db.set_value("User", member, "_user_tags", format_tags(tags), update_modified=False)
+	_sync_member_tag_links(member, tags)
+	return tags
+
+
+def _users_with_tag(tag: str) -> list[str]:
+	tag = (tag or "").strip()
+	if not tag:
+		return []
+	rows = frappe.get_all("User", {"_user_tags": ["like", f"%{tag}%"]}, ["name", "_user_tags"])
+	return users_with_tag([(row.name, row._user_tags) for row in rows], tag)
+
+
+def _delete_tag_master_if_unused(tag: str) -> None:
+	# Tag is global: a tag another doctype still uses must keep its master.
+	if frappe.db.exists("Tag", tag) and not frappe.db.exists("Tag Link", {"tag": tag}):
+		frappe.delete_doc("Tag", tag, ignore_permissions=True, force=True)
+
+
+def _clean_members(members) -> list[str]:
+	if isinstance(members, str):
+		members = frappe.parse_json(members)
+	if not isinstance(members, list) or not members or not all(isinstance(m, str) for m in members):
+		frappe.throw(_("Select at least one member."), frappe.ValidationError)
+	if len(members) > MAX_BULK_MEMBERS:
+		frappe.throw(
+			_("You can change at most {0} members at once.").format(MAX_BULK_MEMBERS), frappe.ValidationError
+		)
+	return [_validate_member(member) for member in dict.fromkeys(members)]
+
+
 @frappe.whitelist()
 def add_member_tag(member: str, tag: str):
-	"""Moderator-only wrapper around the same `_user_tags` column Frappe's own
-	frappe.desk.doctype.tag.tag.add_tag writes — not calling that function
-	directly: it has no permission check of its own (a bare frappe.db.set_value),
-	so exposing it as-is would let any logged-in user tag any User record.
+	"""Moderator-only. Not frappe.desk.doctype.tag.tag.add_tag: that has no
+	permission check (any logged-in user could tag any User), and its helper
+	update_tags needs write permission on User, which a Moderator lacks.
 	"""
 	frappe.only_for(MEMBER_ADMIN_ROLES)
 	member = _validate_member(member)
-	tag = (tag or "").strip()
-	if not tag:
-		frappe.throw(_("Tag cannot be empty."), frappe.ValidationError)
+	tag = _canonical_tag(_clean_tag(tag))
 
 	current = _member_tags(member)
-	if tag not in current:
-		if not frappe.db.exists("Tag", tag):
-			frappe.get_doc({"doctype": "Tag", "name": tag}).insert(ignore_permissions=True)
-		current.append(tag)
-		frappe.db.set_value("User", member, "_user_tags", "," + ",".join(current), update_modified=False)
+	if not any(same_tag(existing, tag) for existing in current):
+		current = _set_member_tags(member, current + [tag])
 	return current
 
 
@@ -1792,11 +1891,127 @@ def add_member_tag(member: str, tag: str):
 def remove_member_tag(member: str, tag: str):
 	frappe.only_for(MEMBER_ADMIN_ROLES)
 	member = _validate_member(member)
-	current = [t for t in _member_tags(member) if t.lower() != (tag or "").strip().lower()]
-	frappe.db.set_value(
-		"User", member, "_user_tags", ("," + ",".join(current)) if current else "", update_modified=False
+	tag = (tag or "").strip()
+	return _set_member_tags(member, [t for t in _member_tags(member) if not same_tag(t, tag)])
+
+
+@frappe.whitelist()
+def bulk_add_member_tag(members, tag: str):
+	frappe.only_for(MEMBER_ADMIN_ROLES)
+	members = _clean_members(members)
+	tag = _canonical_tag(_clean_tag(tag))
+
+	updated = 0
+	for member in members:
+		current = _member_tags(member)
+		if not any(same_tag(existing, tag) for existing in current):
+			_set_member_tags(member, current + [tag])
+			updated += 1
+	return {"tag": tag, "updated": updated, "total": len(members)}
+
+
+@frappe.whitelist()
+def bulk_remove_member_tag(members, tag: str):
+	frappe.only_for(MEMBER_ADMIN_ROLES)
+	members = _clean_members(members)
+	tag = (tag or "").strip()
+
+	updated = 0
+	for member in members:
+		current = _member_tags(member)
+		kept = [t for t in current if not same_tag(t, tag)]
+		if len(kept) != len(current):
+			_set_member_tags(member, kept)
+			updated += 1
+	return {"tag": tag, "updated": updated, "total": len(members)}
+
+
+@frappe.whitelist()
+def get_member_tags():
+	"""Every tag with how many members carry it (Users only).
+
+	Counted from `_user_tags`, the column the Users list shows, so the numbers
+	always agree with the list. Tags that exist but no member has yet (made with
+	"New tag") appear with 0; tags only used on other doctypes stay out.
+	"""
+	frappe.only_for(MEMBER_ADMIN_ROLES)
+
+	rows = frappe.get_all(
+		"User",
+		{"name": ["not in", ["Administrator", "Guest"]], "_user_tags": ["!=", ""]},
+		["_user_tags"],
 	)
-	return current
+	counts = tag_counts([row._user_tags for row in rows])
+
+	seen = {tag.casefold() for tag, _count in counts}
+	used_elsewhere = {
+		tag.casefold() for tag in frappe.get_all("Tag Link", {"document_type": ["!=", "User"]}, pluck="tag")
+	}
+	for tag in frappe.get_all("Tag", pluck="name"):
+		if tag.casefold() not in seen and tag.casefold() not in used_elsewhere:
+			counts.append((tag, 0))
+
+	counts.sort(key=lambda row: (-row[1], row[0].casefold()))
+	return [{"tag": tag, "count": count} for tag, count in counts]
+
+
+@frappe.whitelist()
+def create_member_tag(tag: str):
+	frappe.only_for(MEMBER_ADMIN_ROLES)
+	tag = _clean_tag(tag)
+
+	if frappe.db.exists("Tag", tag) or _users_with_tag(tag):
+		frappe.throw(_("A tag named {0} already exists.").format(tag), frappe.DuplicateEntryError)
+
+	_ensure_tag_master(tag)
+	return {"tag": tag}
+
+
+@frappe.whitelist()
+def rename_member_tag(tag: str, new_tag: str):
+	"""Rewrites the tag on every member that carries it.
+
+	Frappe stores tags as text on each row, so a rename cannot be a single
+	update; it is done member by member. Everything runs in one request, so a
+	failure part-way rolls the whole rename back.
+	"""
+	frappe.only_for(MEMBER_ADMIN_ROLES)
+	tag = (tag or "").strip()
+	new_tag = _clean_tag(new_tag)
+
+	if tag == new_tag:
+		return {"tag": new_tag, "updated": 0}
+	if same_tag(tag, new_tag) or frappe.db.exists("Tag", new_tag) or _users_with_tag(new_tag):
+		frappe.throw(
+			_("A tag named {0} already exists. Choose a different name.").format(new_tag),
+			frappe.DuplicateEntryError,
+		)
+
+	members = _users_with_tag(tag)
+	for member in members:
+		_set_member_tags(
+			member, [new_tag if same_tag(existing, tag) else existing for existing in _member_tags(member)]
+		)
+
+	_ensure_tag_master(new_tag)
+	_delete_tag_master_if_unused(tag)
+	return {"tag": new_tag, "updated": len(members)}
+
+
+@frappe.whitelist()
+def delete_member_tag(tag: str):
+	"""Takes the tag off every member. Accounts and learning data are untouched."""
+	frappe.only_for(MEMBER_ADMIN_ROLES)
+	tag = (tag or "").strip()
+	if not tag:
+		frappe.throw(_("Tag cannot be empty."), frappe.ValidationError)
+
+	members = _users_with_tag(tag)
+	for member in members:
+		_set_member_tags(member, [t for t in _member_tags(member) if not same_tag(t, tag)])
+
+	_delete_tag_master_if_unused(tag)
+	return {"removed": len(members)}
 
 
 @frappe.whitelist()

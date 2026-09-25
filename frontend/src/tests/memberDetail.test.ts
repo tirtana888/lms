@@ -11,6 +11,12 @@ import { defineComponent, h, reactive } from 'vue'
 vi.stubGlobal('__', (text: string) => text)
 enableAutoUnmount(afterEach)
 
+// frappe's translation layer patches String.prototype.format onto the page at
+// runtime; the toasts and dialog text these components build rely on it.
+;(String.prototype as any).format = function (this: string, ...args: unknown[]): string {
+	return this.replace(/{(\d+)}/g, (_match, index) => String(args[Number(index)]))
+}
+
 // frappe-ui's ESM build doesn't resolve under vitest (see chapterForm.test.ts),
 // so every export the page reaches for is stubbed by hand.
 const { callMock, createResourceMock, toastMock } = vi.hoisted(() => {
@@ -45,6 +51,9 @@ vi.mock('frappe-ui', () => ({
 	toast: toastMock,
 	Avatar: { props: ['image', 'label', 'size'], template: `<div />` },
 	Badge: { template: `<span><slot /></span>` },
+	// MemberDetail wraps hidden-badge overflow in a Tooltip; without a stub every
+	// render past the header throws "No Tooltip export is defined".
+	Tooltip: { props: ['text'], template: `<span><slot /></span>` },
 	Breadcrumbs: { props: ['items'], template: `<nav><slot /></nav>` },
 	Button: {
 		props: ['variant', 'label', 'loading', 'theme'],
@@ -313,6 +322,7 @@ describe('the member detail page', () => {
 			last_active: null,
 			last_ip: null,
 			tags: [],
+			notes: [],
 			enrollments: [{ course: 'c1', course_title: 'Course One', progress: 50 }],
 			quiz_submissions: [],
 			avg_quiz_score: null,
@@ -455,6 +465,56 @@ describe('the member detail page', () => {
 				tag: 'scholarship',
 			})
 			expect(overview.data.tags).toEqual(['vip', 'scholarship'])
+		})
+
+		it('offers existing tags on focus and adds one with a click', async () => {
+			const router = makeRouter()
+			await router.push(`/users/${MEMBER}`)
+			lookup.data = { name: MEMBER, full_name: 'Jane Doe', roles: [] }
+			overview.data = { ...baseOverview }
+			const wrapper = await mountDetail(router)
+			// Opening the member costs no request for the suggestion list.
+			expect(callMock).not.toHaveBeenCalledWith('lms.lms.api.get_member_tags')
+			callMock.mockImplementation(async (url: string) =>
+				url === 'lms.lms.api.get_member_tags'
+					? [
+							{ tag: 'vip', count: 4 },
+							{ tag: 'scholarship', count: 3 },
+					  ]
+					: ['vip', 'scholarship']
+			)
+
+			await wrapper.find('[data-testid="field-Add a tag"]').trigger('focusin')
+			await flushPromises()
+
+			const suggestions = wrapper.find('[data-testid="tag-suggestions"]')
+			// 'vip' is already on this member, so only the other one is offered.
+			expect(suggestions.text()).toContain('scholarship')
+			expect(suggestions.text()).not.toContain('vip')
+
+			await suggestions.find('button').trigger('click')
+			await flushPromises()
+
+			expect(callMock).toHaveBeenCalledWith('lms.lms.api.add_member_tag', {
+				member: MEMBER,
+				tag: 'scholarship',
+			})
+			expect(overview.data.tags).toEqual(['vip', 'scholarship'])
+		})
+
+		it('does not send a tag containing a comma', async () => {
+			const router = makeRouter()
+			await router.push(`/users/${MEMBER}`)
+			lookup.data = { name: MEMBER, full_name: 'Jane Doe', roles: [] }
+			overview.data = { ...baseOverview }
+			const wrapper = await mountDetail(router)
+
+			await wrapper.find('[data-testid="field-Add a tag"]').setValue('a,b')
+			await wrapper.find('[data-testid="add-tag"]').trigger('click')
+			await flushPromises()
+
+			expect(callMock).not.toHaveBeenCalledWith('lms.lms.api.add_member_tag', expect.anything())
+			expect(wrapper.text()).toContain('A tag cannot contain a comma.')
 		})
 
 		it('adds a note and clears the textarea', async () => {

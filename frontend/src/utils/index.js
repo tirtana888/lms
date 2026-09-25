@@ -593,6 +593,21 @@ const getSidebarItems = (forMobile = false) => {
 					},
 				},
 				{
+					label: 'Tags',
+					icon: 'Tag',
+					to: 'Tags',
+					activeFor: ['Tags'],
+					// Same gate as Users: get_member_tags and the tag writers are
+					// MEMBER_ADMIN_ROLES-only, and Tags.vue redirects anyone else.
+					condition: () => {
+						return (
+							!forMobile &&
+							(userResource?.data?.is_moderator ||
+								userResource?.data?.is_system_manager)
+						)
+					},
+				},
+				{
 					label: 'Jobs',
 					icon: 'Briefcase',
 					to: 'Jobs',
